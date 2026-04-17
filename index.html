@@ -801,33 +801,118 @@ async function avFetch(fn, params) {
 }
 
 async function fetchAllData(company) {
-  setLoading('Verificando caché...');
-  const cached = cacheGet(company.ticker);
-  if (cached) {
-    setStatus(`${company.name} · Desde caché`, 'green');
+  setLoading('Buscando balance...');
+
+  // Check manual balances
+  const manualData = buildFromManualBalances(company);
+  if (manualData) {
+    setStatus(`${company.name} · Balance manual`, 'green');
     setLoading('');
-    return cached;
+    return manualData;
   }
-  setLoading(`Obteniendo overview y cotización de ${company.ticker}...`);
-  const [overview, quote] = await Promise.all([
-    avFetch('OVERVIEW', `symbol=${company.ticker}`),
-    avFetch('GLOBAL_QUOTE', `symbol=${company.ticker}`)
-  ]);
-  if (!overview.Symbol) throw new Error(`No se encontraron datos para ${company.ticker}. Verificá el ticker.`);
 
-  setLoading('Obteniendo Income Statement...');
-  const income = await avFetch('INCOME_STATEMENT', `symbol=${company.ticker}`);
-
-  setLoading('Obteniendo Balance Sheet...');
-  const balance = await avFetch('BALANCE_SHEET', `symbol=${company.ticker}`);
-
-  setLoading('Obteniendo Cash Flow...');
-  const cashflow = await avFetch('CASH_FLOW', `symbol=${company.ticker}`);
-
-  const data = { overview, quote, income, balance, cashflow, fetchedAt: Date.now() };
-  cacheSet(company.ticker, data);
-  return data;
+  // No data available
+  throw new Error(`No hay balance cargado para ${company.name}. Cargá el balance en la sección 📁 Balances.`);
 }
+
+// ── Build fetchedData object from manual balances ─────────────────────────────
+function n2s(v, mult=1000000) {
+  if (v===null||v===undefined||isNaN(v)) return 'None';
+  return String(parseFloat(v) * mult);
+}
+
+function buildFromManualBalances(company) {
+  const db = balGetAll();
+  const prefix = company.name + '||';
+  const entries = Object.entries(db)
+    .filter(([k]) => k.startsWith(prefix))
+    .map(([k,v]) => { const [,year,q]=k.split('||'); return {year:parseInt(year),q,data:v}; })
+    .sort((a,b) => b.year!==a.year ? b.year-a.year : b.q.localeCompare(a.q));
+
+  if (!entries.length) return null;
+
+  const annuals  = entries.filter(e => e.q==='Q4'||e.q==='Anual');
+  const quarters = entries.filter(e => ['Q1','Q2','Q3'].includes(e.q));
+
+  if (!annuals.length && !quarters.length) return null;
+
+  // Multiplier: stored values are in millions/miles/unidades
+  const mult = e => {
+    const u = e.data._unidad||'Millones';
+    return u==='Miles'?1e3 : u==='Millones'?1e6 : 1;
+  };
+
+  // Convert one manual entry → Alpha Vantage-style report object
+  const toReport = (e) => {
+    const d = calcDerived(e.data);
+    const m = mult(e);
+    const yr = e.year;
+    const qEndMonth = {Q1:'03',Q2:'06',Q3:'09',Q4:'12',Anual:'12'}[e.q]||'12';
+    return {
+      fiscalDateEnding:                      `${yr}-${qEndMonth}-${qEndMonth==='03'?'31':qEndMonth==='06'?'30':qEndMonth==='09'?'30':'31'}`,
+      totalRevenue:                           n2s(d.revenue,m),
+      costOfRevenue:                          n2s(d.costs,m),
+      grossProfit:                            n2s(d.gross_profit,m),
+      ebit:                                   n2s(d.ebit,m),
+      depreciationAndAmortization:            n2s(d.da,m),
+      interestExpense:                        n2s(d.fin_cost,m),
+      interestIncome:                         n2s(d.fin_income,m),
+      incomeTaxExpense:                       n2s(d.tax,m),
+      netIncome:                              n2s(d.net_income,m),
+      cashAndCashEquivalentsAtCarryingValue:  n2s(d.cash,m),
+      totalCurrentAssets:                     n2s(d.current_assets,m),
+      totalNonCurrentAssets:                  n2s(d.non_current_assets,m),
+      totalAssets:                            n2s((d.current_assets||0)+(d.non_current_assets||0),m),
+      shortTermDebt:                          n2s(d.debt_st,m),
+      totalCurrentLiabilities:               n2s(d.current_liab,m),
+      longTermDebt:                           n2s(d.debt_lt,m),
+      totalNonCurrentLiabilities:            n2s(d.non_current_liab,m),
+      totalLiabilities:                       n2s((d.current_liab||0)+(d.non_current_liab||0),m),
+      totalShareholderEquity:                 n2s(d.equity,m),
+      operatingCashflow:                      n2s(d.cfo,m),
+      capitalExpenditures:                    n2s(d.capex ? -Math.abs(d.capex) : null,m),
+      cashflowFromFinancing:                  n2s(d.cff,m),
+      dividendPayout:                         n2s(d.dividends,m),
+    };
+  };
+
+  const annualReports    = annuals.map(toReport);
+  const quarterlyReports = [...quarters.map(toReport), ...annuals.map(toReport)].slice(0,8);
+
+  // Overview stub from company info
+  const latest = annuals[0] || quarters[0];
+  const d = calcDerived(latest.data);
+  const m = mult(latest);
+  const overview = {
+    Symbol:       company.ticker,
+    Name:         company.name,
+    Sector:       company.sector || '',
+    Industry:     '',
+    Country:      'Argentina',
+    Currency:     latest.data._moneda || 'USD',
+    MarketCapitalization: 'None',
+    PERatio: 'None', ForwardPE: 'None', PriceToBookRatio: 'None',
+    EVToEBITDA: 'None', EVToRevenue: 'None', Beta: 'None',
+    ReturnOnEquityTTM: 'None', ReturnOnAssetsTTM: 'None',
+    ProfitMargin: 'None', OperatingMarginTTM: 'None',
+    Description: `Balance cargado manualmente. Moneda: ${latest.data._moneda||'USD'} ${latest.data._unidad||'Millones'}. Tipo: ${latest.data._cons||'Consolidado'}.`,
+  };
+
+  // Quote stub (no price available)
+  const quote = { 'Global Quote': {
+    '05. price': 'None', '09. change': 'None', '10. change percent': 'None'
+  }};
+
+  return {
+    overview,
+    quote,
+    income:   { annualReports, quarterlyReports },
+    balance:  { annualReports, quarterlyReports },
+    cashflow: { annualReports, quarterlyReports },
+    _isManual: true,
+  };
+}
+
 
 // ── UI HELPERS ────────────────────────────────────────────────────────────────
 function setStatus(text, color='') {
@@ -2437,52 +2522,52 @@ const IPC_STORE    = 'arg_ipc_v1';
 // ── Field definitions ─────────────────────────────────────────────────────────
 const BAL_FIELDS = {
   eerr: [
-    {key:'revenue',      lbl:'Revenues / Ingresos totales',          calc:false},
-    {key:'costs',        lbl:'Costs / Costo de ventas',              calc:false},
-    {key:'gross_profit', lbl:'Gross Profit / Resultado bruto',       calc:'revenue+costs'},
-    {key:'da',           lbl:'D&A / Depreciación y amortización',    calc:false},
-    {key:'ebit',         lbl:'Operating Income / EBIT',              calc:false},
-    {key:'ebitda_calc',  lbl:'EBITDA (calculado: EBIT + D&A)',       calc:'ebit+da', display:true},
-    {key:'ebitda_rep',   lbl:'EBITDA Reportado (si lo reportan)',    calc:false, optional:true},
-    {key:'adj_ebitda',   lbl:'Adjusted EBITDA (si lo reportan)',     calc:false, optional:true},
-    {key:'fin_income',   lbl:'Financial Income / Ingreso financiero',calc:false},
-    {key:'fin_cost',     lbl:'Financial Cost / Egreso financiero',   calc:false},
-    {key:'fin_net',      lbl:'Net Financial Results (calculado)',    calc:'fin_income+fin_cost', display:true},
-    {key:'tax',          lbl:'Income Tax / Impuesto a las ganancias',calc:false},
-    {key:'net_income',   lbl:'Net Income / Resultado del ejercicio', calc:false},
+    {key:'revenue',      lbl:'Revenues / Ingresos totales',                    calc:false},
+    {key:'costs',        lbl:'Costs / Costo de ventas',                        calc:false},
+    {key:'gross_profit', lbl:'Gross Profit / Resultado bruto',                 calc:'auto', editable:true, formula:'revenue+costs'},
+    {key:'da',           lbl:'D&A / Depreciación y amortización',              calc:false},
+    {key:'ebit',         lbl:'Operating Income / EBIT',                        calc:false},
+    {key:'ebitda_calc',  lbl:'EBITDA (calculado: EBIT + D&A)',                 calc:'auto', display:true, formula:'ebit+|da|'},
+    {key:'ebitda_rep',   lbl:'EBITDA Reportado (si lo reportan)',              calc:false, optional:true},
+    {key:'adj_ebitda',   lbl:'Adjusted EBITDA (si lo reportan)',               calc:false, optional:true},
+    {key:'fin_income',   lbl:'Financial Income / Ingreso financiero',          calc:false},
+    {key:'fin_cost',     lbl:'Financial Cost / Egreso financiero',             calc:false},
+    {key:'fin_net',      lbl:'Net Financial Results (Ing. - Egr., calculado)', calc:'auto', display:true, formula:'fin_income+fin_cost'},
+    {key:'tax',          lbl:'Income Tax / Impuesto a las ganancias',          calc:false},
+    {key:'net_income',   lbl:'Net Income / Resultado del ejercicio',           calc:false},
   ],
   balance: [
-    {key:'cash',               lbl:'Cash & equivalents / Caja',               calc:false},
-    {key:'current_assets',     lbl:'Total Current Assets / Activo corriente',  calc:false},
+    {key:'cash',               lbl:'Cash & equivalents / Caja',                    calc:false},
+    {key:'current_assets',     lbl:'Total Current Assets / Activo corriente',      calc:false},
     {key:'non_current_assets', lbl:'Total Non-current Assets / Activo no corriente', calc:false},
-    {key:'total_assets',       lbl:'Total Assets / Activo total',             calc:'current_assets+non_current_assets'},
-    {key:'debt_st',            lbl:'Short-term debt / Deuda financiera CP',   calc:false},
+    {key:'debt_st',            lbl:'Short-term debt / Deuda financiera CP',        calc:false},
     {key:'current_liab',       lbl:'Total Current Liabilities / Pasivo corriente', calc:false},
-    {key:'debt_lt',            lbl:'Long-term debt / Deuda financiera LP',    calc:false},
+    {key:'debt_lt',            lbl:'Long-term debt / Deuda financiera LP',         calc:false},
     {key:'non_current_liab',   lbl:'Total Non-current Liabilities / Pasivo no corriente', calc:false},
-    {key:'total_liab',         lbl:'Total Liabilities / Total pasivo',        calc:'current_liab+non_current_liab'},
     {key:'equity',             lbl:"Total Shareholders' Equity / Patrimonio neto", calc:false},
-    {key:'net_debt',           lbl:'Net Debt / Deuda neta (calculado)',       calc:'debt_st+debt_lt-cash', display:true},
   ],
   flujo: [
-    {key:'cfo',              lbl:'Net cash flow from operating activities / FCO', calc:false},
-    {key:'capex',            lbl:'Acquisitions of PP&E / Capex',                  calc:false},
-    {key:'fcf',              lbl:'Free Cash Flow / FCF (calculado)',               calc:'cfo+capex', display:true},
-    {key:'fcf_rep',          lbl:'FCF Reportado (si lo reportan)',                calc:false, optional:true},
-    {key:'cff',              lbl:'Net cash flow from financing activities',        calc:false},
-    {key:'interest_paid',    lbl:'Interest paid / Intereses pagados',             calc:false},
-    {key:'interest_received',lbl:'Interest received / Intereses cobrados',        calc:false},
-    {key:'debt_proceeds',    lbl:'Debt proceeds / Toma de préstamos',             calc:false},
-    {key:'debt_repay',       lbl:'Debt repayments / Pago de préstamos',           calc:false},
-    {key:'dividends',        lbl:'Dividends paid / Dividendos pagados',           calc:false, optional:true},
+    {key:'cfo',               lbl:'Net cash flow from operating activities / FCO', calc:false},
+    {key:'cfo_tax',           lbl:'Income tax paid (dentro del FCO)',               calc:false, optional:true},
+    {key:'capex',             lbl:'Acquisitions of PP&E / Capex',                   calc:false},
+    {key:'fcf',               lbl:'Free Cash Flow (calculado: FCO + Capex)',        calc:'auto', display:true, formula:'cfo+capex'},
+    {key:'fcf_rep',           lbl:'FCF Reportado (si lo reportan)',                 calc:false, optional:true},
+    {key:'cff',               lbl:'Net cash flow from financing activities',         calc:false},
+    {key:'interest_paid',     lbl:'Interest paid / Intereses pagados',              calc:false},
+    {key:'interest_received', lbl:'Interest received / Intereses cobrados',         calc:false},
+    {key:'debt_proceeds',     lbl:'Debt proceeds / Toma de préstamos',              calc:false},
+    {key:'debt_repay',        lbl:'Debt repayments / Pago de préstamos',            calc:false},
+    {key:'dividends',         lbl:'Dividends paid / Dividendos pagados',            calc:false, optional:true},
   ],
   deuda: [
-    {key:'debt_st',     lbl:'Short-term debt / Deuda CP',    calc:false},
-    {key:'debt_lt',     lbl:'Long-term debt / Deuda LP',     calc:false},
-    {key:'total_debt',  lbl:'Total debt / Deuda total',      calc:'debt_st+debt_lt'},
-    {key:'net_debt_d',  lbl:'Net debt reportado (opcional)', calc:false, optional:true},
+    {key:'debt_st',    lbl:'Short-term debt / Deuda CP',                         calc:false},
+    {key:'debt_lt',    lbl:'Long-term debt / Deuda LP',                          calc:false},
+    {key:'total_debt', lbl:'Total Debt (calculado: CP + LP)',                    calc:'auto', editable:true, formula:'debt_st+debt_lt'},
+    {key:'net_debt',   lbl:'Net Debt (calculado: Total Debt - Caja)',            calc:'auto', editable:true, formula:'total_debt-cash_ref'},
+    {key:'net_debt_rep',lbl:'Net Debt Reportado (si lo reportan)',               calc:false, optional:true},
   ],
 };
+
 
 // Fields that are STOCKS (balance sheet) — Q4 = Annual value
 const STOCK_FIELDS = new Set([
@@ -2918,82 +3003,171 @@ function renderFmFields(sec) {
   if(!cont) return;
 
   cont.innerHTML = fields.map(f => {
-    const isCalc    = f.calc && f.display;  // auto-calculated, just shown
-    const isOptional= f.optional;
-    const val = data[f.key] !== undefined ? data[f.key] : '';
-    const calcVal = isCalc ? computeCalcField(f, data) : null;
+    const isAutoOnly  = f.calc==='auto' && !f.editable;   // shown, not editable
+    const isAutoEdit  = f.calc==='auto' && f.editable;    // pre-filled but editable
+    const isOptional  = f.optional;
+    const calcVal     = (f.calc==='auto') ? computeCalcField(f, data) : null;
+    const overrideVal = data['_override_'+f.key];
+    const displayVal  = overrideVal !== undefined ? overrideVal : (data[f.key] !== undefined ? data[f.key] : '');
 
-    if(isCalc) {
+    // Auto-only: show as green read-only display
+    if (isAutoOnly) {
       return `<div class="frow" style="background:var(--bg3);border-radius:5px;padding:6px 10px">
-        <span class="flabel" style="color:var(--text3)">${f.lbl}</span>
+        <span class="flabel" style="color:var(--text3);font-size:11px">${f.lbl}</span>
         <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--green)" id="calc_${f.key}">
-          ${calcVal !== null ? Number(calcVal).toLocaleString('es-AR',{maximumFractionDigits:1}) : 'Completá los campos necesarios'}
+          ${calcVal !== null ? Number(calcVal).toLocaleString('es-AR',{maximumFractionDigits:1}) : '<span style="color:var(--text3);font-size:11px">completá campos</span>'}
         </span>
       </div>`;
     }
 
+    // Auto-editable: pre-filled input that user can override
+    if (isAutoEdit) {
+      const showVal = overrideVal !== undefined ? overrideVal : (calcVal !== null ? calcVal : '');
+      return `<div class="frow">
+        <span class="flabel">${f.lbl}
+          <span style="font-size:10px;color:var(--green);margin-left:4px" id="calcbadge_${f.key}">${overrideVal!==undefined?'(editado)':'(auto)'}</span>
+        </span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" step="any" id="fi_${f.key}" value="${showVal}"
+            style="width:150px;padding:5px 9px;background:var(--bg3);border:0.5px solid var(--green);border-radius:5px;
+                   color:var(--text);font-family:'DM Mono',monospace;font-size:12px;text-align:right;outline:none"
+            oninput="overrideCalcField('${f.key}',this.value)"
+            onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--green)'">
+          <button onclick="resetCalcField('${f.key}')" title="Restaurar calculado"
+            style="padding:3px 7px;font-size:10px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;color:var(--text3);cursor:pointer">↺</button>
+        </div>
+      </div>`;
+    }
+
+    // Normal input
     return `<div class="frow">
       <span class="flabel">${f.lbl}${isOptional?' <span style="font-size:10px;color:var(--text3)">(opcional)</span>':''}</span>
-      <input type="number" step="any" id="fi_${f.key}" value="${val}" placeholder="N/D"
+      <input type="number" step="any" id="fi_${f.key}" value="${displayVal}" placeholder="N/D"
         style="width:160px;padding:5px 9px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:5px;
                color:var(--text);font-family:'DM Mono',monospace;font-size:12px;text-align:right;outline:none"
         oninput="updateFormField('${f.key}',this.value)"
         onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border2)'">
     </div>`;
   }).join('');
+
+  // Balance validation banner
+  if (sec==='balance') {
+    cont.innerHTML += `<div id="balValidation" style="margin-top:.75rem;padding:8px 12px;border-radius:6px;font-size:12px;display:none"></div>`;
+    validateBalance();
+  }
+}
+
+function overrideCalcField(key, val) {
+  const n = parseFloat(val);
+  if (!isNaN(n)) {
+    uFormData['_override_'+key] = n;
+  } else {
+    delete uFormData['_override_'+key];
+  }
+  const badge = document.getElementById('calcbadge_'+key);
+  if (badge) badge.textContent = '(editado)';
+  updateAllCalcDisplays();
+}
+
+function resetCalcField(key) {
+  delete uFormData['_override_'+key];
+  // Re-compute and fill the input
+  const f = Object.values(BAL_FIELDS).flat().find(f=>f.key===key);
+  if (!f) return;
+  const calc = computeCalcField(f, uFormData);
+  const inp = document.getElementById('fi_'+key);
+  if (inp && calc !== null) inp.value = calc;
+  const badge = document.getElementById('calcbadge_'+key);
+  if (badge) badge.textContent = '(auto)';
+  updateAllCalcDisplays();
+}
+
+function validateBalance() {
+  const banner = document.getElementById('balValidation');
+  if (!banner) return;
+  const get = k => { const v = uFormData[k]; return (v!==undefined&&v!==null&&v!=='') ? parseFloat(v) : null; };
+  const ca  = get('current_assets'), nca = get('non_current_assets');
+  const cl  = get('current_liab'),   ncl = get('non_current_liab');
+  const eq  = get('equity');
+  if (ca===null||nca===null||cl===null||ncl===null||eq===null) {
+    banner.style.display='none'; return;
+  }
+  const totalA = ca + nca;
+  const totalP = cl + ncl + eq;
+  const diff = Math.abs(totalA - totalP);
+  const pct  = diff / totalA;
+  if (pct < 0.001) {  // <0.1% tolerance for rounding
+    banner.style.display='block';
+    banner.style.background='var(--green2)';
+    banner.style.color='var(--green)';
+    banner.innerHTML=`✓ Balance cuadra: Activo Total = ${totalA.toLocaleString('es-AR',{maximumFractionDigits:0})} = Pasivo + PN`;
+  } else {
+    banner.style.display='block';
+    banner.style.background='var(--red2)';
+    banner.style.color='var(--red)';
+    banner.innerHTML=`✗ Balance no cuadra: Activo (${totalA.toLocaleString('es-AR',{maximumFractionDigits:0})}) ≠ Pasivo + PN (${totalP.toLocaleString('es-AR',{maximumFractionDigits:0})}). Diferencia: ${diff.toLocaleString('es-AR',{maximumFractionDigits:0})}`;
+  }
 }
 
 function computeCalcField(f, data) {
-  // Simple expression evaluator for calc fields
   const get = k => {
     const v = data[k];
     return (v!==undefined && v!==null && v!=='') ? parseFloat(v) : null;
   };
-  if(f.key==='ebitda_calc') {
+  const abs = v => v !== null ? Math.abs(v) : null;
+
+  // If user has manually overridden this field, respect it
+  if (f.editable && data['_override_'+f.key] !== undefined) return data['_override_'+f.key];
+
+  if (f.key==='gross_profit') {
+    const r=get('revenue'), co=get('costs');
+    return (r!==null&&co!==null) ? r+co : null;
+  }
+  if (f.key==='ebitda_calc') {
     const ebit=get('ebit'), da=get('da');
     return (ebit!==null&&da!==null) ? ebit+Math.abs(da) : null;
   }
-  if(f.key==='fin_net') {
-    const i=get('fin_income'), c=get('fin_cost');
-    return (i!==null&&c!==null) ? i+c : null;
+  if (f.key==='fin_net') {
+    const i=get('fin_income'), co=get('fin_cost');
+    return (i!==null&&co!==null) ? i+co : null;
   }
-  if(f.key==='gross_profit') {
-    const r=get('revenue'), c=get('costs');
-    return (r!==null&&c!==null) ? r+c : null;
-  }
-  if(f.key==='fcf') {
+  if (f.key==='fcf') {
     const o=get('cfo'), x=get('capex');
     return (o!==null&&x!==null) ? o+x : null;
   }
-  if(f.key==='net_debt') {
-    const s=get('debt_st'), l=get('debt_lt'), c=get('cash');
-    return (s!==null&&l!==null&&c!==null) ? s+l-c : null;
-  }
-  if(f.key==='total_assets') {
-    const ca=get('current_assets'), nca=get('non_current_assets');
-    return (ca!==null&&nca!==null) ? ca+nca : null;
-  }
-  if(f.key==='total_liab') {
-    const cl=get('current_liab'), ncl=get('non_current_liab');
-    return (cl!==null&&ncl!==null) ? cl+ncl : null;
-  }
-  if(f.key==='total_debt') {
+  if (f.key==='total_debt') {
     const s=get('debt_st'), l=get('debt_lt');
     return (s!==null&&l!==null) ? s+l : null;
+  }
+  if (f.key==='net_debt') {
+    // Use balance cash if available, else deuda section cash
+    const td=get('total_debt') ?? computeCalcField({key:'total_debt'}, data);
+    const cash=get('cash');
+    return (td!==null&&cash!==null) ? td-cash : null;
   }
   return null;
 }
 
 function updateFormField(key, val) {
   uFormData[key] = (val===''||val===null) ? null : parseFloat(val);
-  // Update all visible calc fields
+  updateAllCalcDisplays();
+  if (fmCurrentSection==='balance') validateBalance();
+}
+
+function updateAllCalcDisplays() {
   const sec = fmCurrentSection;
   BAL_FIELDS[sec]?.forEach(f => {
-    if(f.calc && f.display) {
-      const el = document.getElementById('calc_'+f.key);
-      if(el) {
-        const v = computeCalcField(f, uFormData);
-        el.textContent = v!==null ? Number(v).toLocaleString('es-AR',{maximumFractionDigits:1}) : 'Completá los campos necesarios';
+    if (f.calc==='auto') {
+      const v = computeCalcField(f, uFormData);
+      // Update read-only display
+      const dispEl = document.getElementById('calc_'+f.key);
+      if (dispEl) dispEl.innerHTML = v!==null
+        ? Number(v).toLocaleString('es-AR',{maximumFractionDigits:1})
+        : '<span style="color:var(--text3);font-size:11px">completá campos</span>';
+      // Update editable input if not overridden
+      if (f.editable && uFormData['_override_'+f.key]===undefined) {
+        const inp = document.getElementById('fi_'+f.key);
+        if (inp && v!==null) inp.value = v;
       }
     }
   });
@@ -3011,6 +3185,17 @@ function saveManualBalance() {
   const cons   = document.getElementById('fmCons')?.value;
 
   if(!co || !year || !q) { alert('Completá empresa, año y período'); return; }
+
+  // Balance validation: block if doesn't square
+  const _get = k => { const v=uFormData[k]; return (v!==undefined&&v!==null&&v!=='') ? parseFloat(v) : null; };
+  const _ca=_get('current_assets'), _nca=_get('non_current_assets');
+  const _cl=_get('current_liab'), _ncl=_get('non_current_liab'), _eq=_get('equity');
+  if (_ca!==null && _nca!==null && _cl!==null && _ncl!==null && _eq!==null) {
+    const _totalA = _ca+_nca, _totalP = _cl+_ncl+_eq;
+    if (Math.abs(_totalA-_totalP)/_totalA > 0.001) {
+      if (!confirm(`⚠ El balance no cuadra (diferencia: ${Math.abs(_totalA-_totalP).toLocaleString('es-AR',{maximumFractionDigits:0})}).\n¿Guardar de todas formas?`)) return;
+    }
+  }
 
   const key = balKey(co, year, q);
   const db  = balGetAll();
