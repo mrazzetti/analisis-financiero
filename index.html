@@ -2654,7 +2654,7 @@ function checkPin(val) {
 }
 
 // ── Upload form steps ─────────────────────────────────────────────────────────
-let uStep=1, uFile=null, uExtracted={}, uMeta={}, uMappings={}, uMapSection='eerr';
+let uStep=1, uFile=null, uExtracted={}, uMeta={}, uMappings={}, uMapSection='eerr', uSheetDetect={}, uAllSheets=[];
 
 function initUploadForm() { uStep=1; renderStep(); }
 
@@ -2722,39 +2722,82 @@ async function processFile() {
   }
 }
 
-// Extract from Excel
+// Extract from Excel — auto-detects sheets per section
 async function extractExcel() {
-  return new Promise((resolve,reject) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => {
       try {
         const wb = XLSX.read(e.target.result, {type:'array'});
-        uExtracted = {};
+
+        // Parse all sheets into rows
+        const allSheets = {};
         wb.SheetNames.forEach(sn => {
           const ws = wb.Sheets[sn];
           const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
           const items = [];
           rows.forEach(row => {
-            const textCol = row.findIndex(c=>typeof c==='string'&&c.trim().length>3);
-            if(textCol<0) return;
-            const numCols = row.map((c,i)=>{
-              if(i===textCol) return null;
-              const n = typeof c==='number'?c:parseFloat(String(c).replace(/[$.,()\s]/g,'').replace(/\./g,'').replace(',','.'));
-              return isNaN(n)?null:n;
-            }).filter(x=>x!==null);
-            if(!numCols.length) return;
+            const textCol = row.findIndex(c => typeof c==='string' && c.trim().length > 2);
+            if (textCol < 0) return;
             const label = String(row[textCol]).trim();
-            if(label.length<3||/^[\d\s]+$/.test(label)) return;
-            items.push({raw:label, val:numCols[0], vals:numCols});
+            if (label.length < 3 || /^[\d\s]+$/.test(label)) return;
+            // Find numeric values in the row
+            const numVals = [];
+            row.forEach((cell, i) => {
+              if (i === textCol) return;
+              const n = typeof cell === 'number' ? cell
+                : parseFloat(String(cell).replace(/[$\s]/g,'').replace(/\./g,'').replace(',','.').replace(/[()]/g,'')) * (String(cell).includes('(')?-1:1);
+              if (!isNaN(n) && n !== 0) numVals.push(n);
+            });
+            if (numVals.length) items.push({raw:label, val:numVals[0], vals:numVals});
           });
-          if(items.length) uExtracted[sn]=items;
+          allSheets[sn] = items;
         });
-        // Try to auto-detect meta from content
+
+        // Auto-detect which sheet belongs to which section
+        const KEYWORDS = {
+          eerr:    ['resultado','ingreso','revenue','ventas','ganancia','perdida','ebit','utilidad','income','profit','pérdida','ganancias'],
+          balance: ['activo','pasivo','patrimonio','asset','liability','equity','situacion','balance','bienes de uso'],
+          flujo:   ['flujo','efectivo','cash','operativ','financiaci','inversion','actividades'],
+          notas:   ['nota','financiero','interes','interest','resultado financiero','diferencia de cambio','notes'],
+        };
+
+        const detected = {eerr:null, balance:null, flujo:null, notas:null};
+        const scores = {};
+
+        Object.entries(allSheets).forEach(([sn, items]) => {
+          const snLow = sn.toLowerCase();
+          const contentLow = items.slice(0,20).map(r=>r.raw.toLowerCase()).join(' ');
+          scores[sn] = {eerr:0, balance:0, flujo:0, notas:0};
+
+          Object.entries(KEYWORDS).forEach(([sec, kws]) => {
+            kws.forEach(kw => {
+              if (snLow.includes(kw)) scores[sn][sec] += 3;       // sheet name match = strong signal
+              if (contentLow.includes(kw)) scores[sn][sec] += 1;  // content match
+            });
+          });
+        });
+
+        // Assign each sheet to its best section (greedy: highest score wins)
+        const usedSheets = new Set();
+        ['eerr','balance','flujo','notas'].forEach(sec => {
+          const best = Object.entries(scores)
+            .filter(([sn]) => !usedSheets.has(sn))
+            .sort((a,b) => b[1][sec] - a[1][sec])[0];
+          if (best && best[1][sec] > 0) {
+            detected[sec] = best[0];
+            usedSheets.add(best[0]);
+          }
+        });
+
+        uExtracted   = allSheets;
+        uSheetDetect = detected;
+        uAllSheets   = wb.SheetNames;
         autoDetectMeta();
         resolve();
       } catch(err){ reject(err); }
     };
-    reader.onerror=()=>reject(new Error('Error leyendo archivo'));
+    reader.onerror = () => reject(new Error('Error leyendo archivo'));
     reader.readAsArrayBuffer(uFile);
   });
 }
@@ -2818,68 +2861,90 @@ function autoDetectMeta() {
 
 // Step 2 — Verify
 function renderStepVerify(cont) {
-  const sheets = Object.keys(uExtracted);
   const totalRows = Object.values(uExtracted).flat().length;
-  const companies_list = [...new Set([...COMPANIES.map(c=>c.name), 'YPF S.A.','Vista Energy','Pampa Energía','TGS','Edenor','Pluspetrol','Tecpetrol','PAE','MSU Energy','CGC','Albanesi','Genneia','Clisa','Telecom Argentina'])];
+  const companies_list = [...new Set([
+    ...COMPANIES.map(c=>c.name),
+    'YPF S.A.','Vista Energy','Pampa Energía','TGS','Edenor',
+    'Pluspetrol','Tecpetrol','PAE','MSU Energy','CGC',
+    'Albanesi','Genneia','Clisa','Telecom Argentina',
+  ])];
+
+  const sections = {eerr:'EERR', balance:'Balance', flujo:'Flujo de efectivo', notas:'Notas financieras'};
+  const sheetOptions = (uAllSheets||[]).map(s=>`<option value="${s}">${s}</option>`).join('');
+
+  const sheetRows = Object.entries(sections).map(([sec, label]) => {
+    const det = uSheetDetect?.[sec];
+    const notFound = !det;
+    return `<div class="frow" style="${notFound?'background:var(--amber2);border-radius:6px;padding:6px 8px;margin-bottom:4px':''}">
+      <span class="flabel" style="min-width:140px">${label}</span>
+      ${uAllSheets?.length > 0 ? `
+        <select class="fselect" id="sheet_${sec}" style="width:200px" onchange="uSheetDetect['${sec}']=this.value||null">
+          <option value="">— Cargar manualmente —</option>
+          ${(uAllSheets||[]).map(s=>`<option value="${s}" ${det===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+        ${notFound?`<span style="font-size:10px;color:var(--amber);margin-left:8px">⚠ No detectada</span>`:'<span style="font-size:10px;color:var(--green);margin-left:8px">✓ Auto</span>'}
+      ` : `<span style="font-size:12px;color:var(--text3)">PDF — carga manual en paso 3</span>`}
+    </div>`;
+  }).join('');
 
   cont.innerHTML=`
     <div style="margin-bottom:1rem">
-      <div class="verify-row verify-ok">✓ Archivo procesado: ${totalRows} filas extraídas${sheets.length>1?' en '+sheets.length+' hojas':''}</div>
-      ${uMeta.moneda_detected?`<div class="verify-row ${uMeta.moneda_detected!=='?'?'verify-ok':'verify-warn'}">${uMeta.moneda_detected!=='?'?'✓':'⚠'} Moneda detectada: <strong style="margin-left:4px">${uMeta.moneda_detected}</strong></div>`:''}
-      ${uMeta.unidad_detected?`<div class="verify-row ${uMeta.unidad_detected!=='?'?'verify-ok':'verify-warn'}">${uMeta.unidad_detected!=='?'?'✓':'⚠'} Unidad detectada: <strong style="margin-left:4px">${uMeta.unidad_detected||'No detectada — confirmá abajo'}</strong></div>`:''}
+      <div class="verify-row verify-ok">✓ Archivo procesado: ${totalRows} filas en ${Object.keys(uExtracted).length} hoja${Object.keys(uExtracted).length>1?'s':''}</div>
+      ${uMeta.moneda_detected&&uMeta.moneda_detected!=='?'?`<div class="verify-row verify-ok">✓ Moneda detectada: <strong style="margin-left:4px">${uMeta.moneda_detected}</strong></div>`:''}
+      ${uMeta.unidad_detected&&uMeta.unidad_detected!=='?'?`<div class="verify-row verify-ok">✓ Unidad detectada: <strong style="margin-left:4px">${uMeta.unidad_detected}</strong></div>`:`<div class="verify-row verify-warn">⚠ Unidad no detectada — confirmá abajo</div>`}
       <div class="verify-row ${uMeta.consolidado_detected!=='?'?'verify-ok':'verify-warn'}">${uMeta.consolidado_detected!=='?'?'✓':'⚠'} Tipo: <strong style="margin-left:4px">${uMeta.consolidado_detected}</strong></div>
     </div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:.75rem">Confirmá o corregí los datos detectados:</div>
-    <div>
-      <div class="frow"><span class="flabel">Empresa</span>
-        <select class="fselect" id="mEmpresa" style="width:220px">
-          ${companies_list.map(n=>`<option>${n}</option>`).join('')}
-          <option value="__new__">+ Nueva empresa...</option>
-        </select>
-      </div>
-      <div class="frow" id="newCoRow" style="display:none"><span class="flabel">Nombre de empresa</span><input id="mEmpresaNew" placeholder="Ej: Pluspetrol S.A." style="padding:5px 9px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px;outline:none;width:220px"></div>
-      <div class="frow"><span class="flabel">Año fiscal</span>
-        <select class="fselect" id="mAnio">${[2024,2023,2022,2021,2020,2019].map(y=>`<option ${y==uMeta.year_detected?'selected':''}>${y}</option>`).join('')}</select>
-      </div>
-      <div class="frow"><span class="flabel">Período</span>
-        <select class="fselect" id="mTrimestre">
-          <option value="Q4">Anual / Q4</option>
-          <option value="Q1">Q1 (ene-mar)</option>
-          <option value="Q2">Q2 (ene-jun)</option>
-          <option value="Q3">Q3 (ene-sep)</option>
-        </select>
-      </div>
-      <div class="frow"><span class="flabel">Moneda</span>
-        <select class="fselect" id="mMoneda">
-          <option ${uMeta.moneda_detected==='ARS'?'selected':''}>ARS</option>
-          <option ${uMeta.moneda_detected==='USD'?'selected':''}>USD</option>
-        </select>
-      </div>
-      <div class="frow"><span class="flabel">Unidad</span>
-        <select class="fselect" id="mUnidad">
-          <option ${uMeta.unidad_detected==='Millones'?'selected':''}>Millones</option>
-          <option ${uMeta.unidad_detected==='Miles'?'selected':''}>Miles</option>
-          <option>Unidades</option>
-        </select>
-      </div>
-      <div class="frow"><span class="flabel">Tipo</span>
-        <select class="fselect" id="mCons">
-          <option ${uMeta.consolidado_detected==='Consolidado'?'selected':''}>Consolidado</option>
-          <option ${uMeta.consolidado_detected==='Individual'?'selected':''}>Individual</option>
-        </select>
-      </div>
-      ${sheets.length>1?`<div class="frow"><span class="flabel">Hoja activa</span>
-        <select class="fselect" id="mSheet">${sheets.map(s=>`<option>${s}</option>`).join('')}</select>
-      </div>`:''}
+
+    <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:.5rem">Asignación de hojas por sección</div>
+    <div style="margin-bottom:1rem">${sheetRows}</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:1rem;padding:8px 10px;background:var(--bg3);border-radius:6px;line-height:1.6">
+      Las secciones sin hoja asignada se podrán completar manualmente en el paso de mapeo.
+    </div>
+
+    <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:.5rem;margin-top:.75rem">Datos del período</div>
+    <div class="frow"><span class="flabel">Empresa</span>
+      <select class="fselect" id="mEmpresa" style="width:220px" onchange="document.getElementById('newCoRow').style.display=this.value==='__new__'?'flex':'none'">
+        ${companies_list.map(n=>`<option>${n}</option>`).join('')}
+        <option value="__new__">+ Nueva empresa...</option>
+      </select>
+    </div>
+    <div class="frow" id="newCoRow" style="display:none"><span class="flabel">Nombre empresa</span>
+      <input id="mEmpresaNew" placeholder="Ej: Pluspetrol S.A." style="padding:5px 9px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px;outline:none;width:220px">
+    </div>
+    <div class="frow"><span class="flabel">Año fiscal</span>
+      <select class="fselect" id="mAnio">${[2024,2023,2022,2021,2020,2019].map(y=>`<option ${y==uMeta.year_detected?'selected':''}>${y}</option>`).join('')}</select>
+    </div>
+    <div class="frow"><span class="flabel">Período</span>
+      <select class="fselect" id="mTrimestre">
+        <option value="Q4">Anual / Q4</option>
+        <option value="Q1">Q1 (ene-mar)</option>
+        <option value="Q2">Q2 (ene-jun)</option>
+        <option value="Q3">Q3 (ene-sep)</option>
+      </select>
+    </div>
+    <div class="frow"><span class="flabel">Moneda</span>
+      <select class="fselect" id="mMoneda">
+        <option ${uMeta.moneda_detected==='ARS'?'selected':''}>ARS</option>
+        <option ${uMeta.moneda_detected==='USD'?'selected':''}>USD</option>
+      </select>
+    </div>
+    <div class="frow"><span class="flabel">Unidad</span>
+      <select class="fselect" id="mUnidad">
+        <option ${uMeta.unidad_detected==='Millones'?'selected':''}>Millones</option>
+        <option ${uMeta.unidad_detected==='Miles'?'selected':''}>Miles</option>
+        <option>Unidades</option>
+      </select>
+    </div>
+    <div class="frow"><span class="flabel">Tipo</span>
+      <select class="fselect" id="mCons">
+        <option ${uMeta.consolidado_detected==='Consolidado'?'selected':''}>Consolidado</option>
+        <option ${uMeta.consolidado_detected==='Individual'?'selected':''}>Individual</option>
+      </select>
     </div>
     <div class="btn-grp">
       <button class="gb" onclick="uStep=1;renderStep()">← Volver</button>
       <button class="gb gb-primary" onclick="saveMetaAndContinue()">Continuar → Mapear campos</button>
     </div>`;
-
-  document.getElementById('mEmpresa').addEventListener('change', function(){
-    document.getElementById('newCoRow').style.display = this.value==='__new__'?'flex':'none';
-  });
 }
 
 function saveMetaAndContinue() {
@@ -2899,7 +2964,7 @@ function saveMetaAndContinue() {
   uMeta.moneda=document.getElementById('mMoneda').value;
   uMeta.unidad=document.getElementById('mUnidad').value;
   uMeta.cons=document.getElementById('mCons').value;
-  uMeta.sheet=document.getElementById('mSheet')?.value || Object.keys(uExtracted)[0];
+  // sheets are handled per-section via uSheetDetect
   // Load saved mappings for this company if exists
   const maps = mapGetAll();
   uMappings = maps[co] ? JSON.parse(JSON.stringify(maps[co])) : {eerr:{},balance:{},flujo:{},notas:{}};
@@ -2931,8 +2996,22 @@ function switchMapTab(sec,el){
   renderMapRows();
 }
 
+
+function getRowsForSection(sec) {
+  const sheet = uSheetDetect?.[sec];
+  if (sheet && uExtracted[sheet]) return uExtracted[sheet];
+  // If no sheet detected, combine all unassigned sheets
+  const assignedSheets = new Set(Object.values(uSheetDetect||{}).filter(Boolean));
+  const unassigned = Object.entries(uExtracted)
+    .filter(([sn]) => !assignedSheets.has(sn))
+    .flatMap(([,items]) => items);
+  // For PDF (single sheet), use it for all sections
+  const allItems = Object.values(uExtracted).flat();
+  return unassigned.length ? unassigned : allItems;
+}
+
 function renderMapRows() {
-  const rows = (uExtracted[uMeta.sheet]||Object.values(uExtracted)[0]||[]);
+  const rows = getRowsForSection(uMapSection);
   const fields = STD_FIELDS[uMapSection];
   const mapped = uMappings[uMapSection]||{};
   document.getElementById('mapRows').innerHTML = rows.map((r,i)=>`
