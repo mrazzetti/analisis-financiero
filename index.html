@@ -2989,6 +2989,96 @@ function renderStepMap(cont) {
   renderMapRows();
 }
 
+
+
+function getRowsForSection(sec) {
+  const sheet = uSheetDetect?.[sec];
+  if (sheet && uExtracted[sheet]) return uExtracted[sheet];
+  const assignedSheets = new Set(Object.values(uSheetDetect||{}).filter(Boolean));
+  const unassigned = Object.entries(uExtracted)
+    .filter(([sn]) => !assignedSheets.has(sn))
+    .flatMap(([,items]) => items);
+  return unassigned.length ? unassigned : Object.values(uExtracted).flat();
+}
+
+// ── Auto-mapping keywords per field ──────────────────────────────────────────
+const AUTO_KEYWORDS = {
+  eerr: {
+    revenue:       ['ingreso','venta','revenue','ventas netas','ingresos por venta','ingresos totales','ingresos operativos','total revenue','net revenue','total de ingresos'],
+    cogs:          ['costo de venta','costo de produccion','cost of','costo de los bienes','costos de venta'],
+    gross_profit:  ['resultado bruto','ganancia bruta','gross profit','utilidad bruta','margen bruto'],
+    ebit:          ['resultado operativo','ebit','resultado de operacion','ganancia operativa','operating income','operating profit','resultado antes de'],
+    da:            ['amortizacion','depreciacion','depreciation','amortization','d&a','desgaste'],
+    interest_exp:  ['intereses pagados','gasto financiero','costo financiero','interest expense','intereses devengados sobre deuda','cargo por intereses'],
+    interest_inc:  ['ingreso financiero','intereses ganados','interest income','intereses cobrados','rendimiento'],
+    interest_net:  ['resultado financiero neto','intereses netos','net interest','resultado por intereses'],
+    tax:           ['impuesto','tax','ganancias corriente','impuesto a las ganancias','income tax'],
+    net_income:    ['resultado del ejercicio','ganancia neta','perdida neta','net income','utilidad neta','resultado neto','profit for','resultado del periodo'],
+  },
+  balance: {
+    cash:              ['efectivo','caja','cash','equivalentes de efectivo','disponibilidades'],
+    current_assets:    ['activo corriente','current assets','total activo corriente','total del activo corriente'],
+    non_current_assets:['activo no corriente','non.current assets','activo fijo','total activo no corriente'],
+    total_assets:      ['total del activo','total activo','total assets','activo total'],
+    current_liab:      ['pasivo corriente','current liabilities','total pasivo corriente','total del pasivo corriente'],
+    non_current_liab:  ['pasivo no corriente','non.current liabilities','total pasivo no corriente'],
+    total_liab:        ['total del pasivo','total pasivo','total liabilities','pasivo total'],
+    debt_st:           ['deuda financiera corriente','prestamos corriente','deudas financieras cp','borrowings current','deuda cp','prestamos y financiaciones corriente'],
+    debt_lt:           ['deuda financiera no corriente','prestamos no corriente','deudas financieras lp','borrowings non','deuda lp','prestamos y financiaciones no corriente'],
+    equity:            ['patrimonio neto','equity','total patrimonio','patrimonio total','total del patrimonio'],
+  },
+  flujo: {
+    cfo:              ['flujo neto.*operativ','actividades operativas','operating activities','cash from operations','efectivo.*operativ'],
+    capex:            ['adquisicion.*bienes de uso','capital expenditure','capex','compra.*propiedades','inversiones en bienes'],
+    debt_repay:       ['pago.*prestamo','repago','repayment','cancelacion.*deuda','devolucion.*prestamo'],
+    debt_proceeds:    ['cobro.*prestamo','toma.*prestamo','proceeds from','obtencion.*prestamo','nuevos prestamos'],
+    interest_paid:    ['pago.*interes','interest paid','intereses pagados.*flujo','intereses abonados'],
+    interest_received:['cobro.*interes','interest received','intereses cobrados.*flujo'],
+    dividends:        ['dividendo','dividend'],
+    cff:              ['flujo neto.*financiacion','actividades de financiacion','financing activities','financiamiento'],
+  },
+  notas: {
+    fin_income:  ['ingreso financiero','interest income','intereses ganados','resultado positivo.*financiero'],
+    fin_expense: ['egreso financiero','interest expense','intereses perdidos','costo financiero','resultado negativo.*financiero'],
+    fin_net:     ['resultado financiero neto','net financial','resultado neto financiero'],
+    fx_result:   ['diferencia de cambio','exchange','tipo de cambio','resultado por tipo'],
+  },
+};
+
+function autoMapSection(sec, rows) {
+  const kws = AUTO_KEYWORDS[sec] || {};
+  const result = {};
+  const usedFields = new Set();
+
+  rows.forEach((row, idx) => {
+    const rawLow = row.raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    let bestField = null, bestScore = 0;
+
+    Object.entries(kws).forEach(([field, keywords]) => {
+      if (usedFields.has(field)) return;
+      let score = 0;
+      keywords.forEach(kw => {
+        // Support simple regex patterns (contain *)
+        const pattern = kw.includes('.*') ? kw : kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        try {
+          if (new RegExp(pattern,'i').test(rawLow)) score += kw.includes('.*') ? 2 : 3;
+        } catch(e) {
+          if (rawLow.includes(kw)) score += 3;
+        }
+      });
+      if (score > bestScore) { bestScore = score; bestField = field; }
+    });
+
+    if (bestField && bestScore >= 3) {
+      result[idx] = bestField;
+      usedFields.add(bestField);
+    }
+  });
+  return result;
+}
+
+// Step 3 — Map (with auto-mapping)
+
 function switchMapTab(sec,el){
   uMapSection=sec;
   document.querySelectorAll('.mtab').forEach(t=>t.classList.remove('active'));
@@ -2996,42 +3086,88 @@ function switchMapTab(sec,el){
   renderMapRows();
 }
 
-
-function getRowsForSection(sec) {
-  const sheet = uSheetDetect?.[sec];
-  if (sheet && uExtracted[sheet]) return uExtracted[sheet];
-  // If no sheet detected, combine all unassigned sheets
-  const assignedSheets = new Set(Object.values(uSheetDetect||{}).filter(Boolean));
-  const unassigned = Object.entries(uExtracted)
-    .filter(([sn]) => !assignedSheets.has(sn))
-    .flatMap(([,items]) => items);
-  // For PDF (single sheet), use it for all sections
-  const allItems = Object.values(uExtracted).flat();
-  return unassigned.length ? unassigned : allItems;
-}
-
 function renderMapRows() {
   const rows = getRowsForSection(uMapSection);
   const fields = STD_FIELDS[uMapSection];
   const mapped = uMappings[uMapSection]||{};
-  document.getElementById('mapRows').innerHTML = rows.map((r,i)=>`
-    <div class="map-row">
-      <div class="raw-cell">
-        <div class="raw-name" title="${r.raw}">${r.raw}</div>
-        <div class="raw-num">${r.val!==undefined?r.val.toLocaleString('es-AR',{maximumFractionDigits:2}):''}</div>
-      </div>
-      <div class="map-arrow">→</div>
-      <select class="std-sel ${mapped[i]?'ok':''}" onchange="setMapping(${i},this.value,this)">
-        <option value="">— Ignorar —</option>
-        ${fields.map(f=>`<option value="${f.key}" ${mapped[i]===f.key?'selected':''}>${f.lbl}</option>`).join('')}
-      </select>
-    </div>`).join('');
+
+  if (!rows.length) {
+    document.getElementById('mapRows').innerHTML = `
+      <div style="padding:1.5rem;text-align:center;color:var(--text3);font-size:13px">
+        No se encontraron filas para esta sección en el archivo.<br>
+        <button class="gb" style="margin-top:.75rem" onclick="showManualEntry('${uMapSection}')">Ingresar manualmente →</button>
+      </div>`;
+    return;
+  }
+
+  // Count auto-mapped in this section
+  const autoCount = Object.values(mapped).filter(Boolean).length;
+  const totalFields = fields.length;
+
+  document.getElementById('mapRows').innerHTML = `
+    <div style="font-size:11px;color:var(--text3);padding:6px 0;margin-bottom:4px;border-bottom:0.5px solid var(--border)">
+      ${autoCount} de ${totalFields} campos mapeados en esta sección ·
+      <span style="color:var(--green)">Verde = auto-mapeado</span> ·
+      <span style="color:var(--text3)">Gris = sin mapear</span>
+    </div>
+    ${rows.map((r,i)=>{
+      const val = mapped[i];
+      const isAuto = !!val;
+      return `<div class="map-row" style="${isAuto?'background:var(--green2);border-radius:5px;padding:4px 6px;margin:2px 0':''}">
+        <div class="raw-cell" style="${isAuto?'background:rgba(0,158,115,0.08)':''}">
+          <div class="raw-name" title="${r.raw}">${r.raw}</div>
+          <div class="raw-num">${r.val!==undefined?Number(r.val).toLocaleString('es-AR',{maximumFractionDigits:2}):''}</div>
+        </div>
+        <div class="map-arrow">${isAuto?'<span style="color:var(--green)">→</span>':'→'}</div>
+        <select class="std-sel ${val?'ok':''}" onchange="setMapping(${i},this.value,this)">
+          <option value="">— Ignorar —</option>
+          ${fields.map(f=>`<option value="${f.key}" ${val===f.key?'selected':''}>${f.lbl}</option>`).join('')}
+        </select>
+      </div>`;
+    }).join('')}`;
 }
 
-function setMapping(idx,val,el){
+function showManualEntry(sec) {
+  const fields = STD_FIELDS[sec];
+  const manual = uMappings[sec]||{};
+  // Use negative indices for manual entries (won't conflict with row indices)
+  document.getElementById('mapRows').innerHTML = `
+    <div style="font-size:12px;color:var(--text3);margin-bottom:.75rem">
+      Ingresá los valores directamente para cada campo de esta sección:
+    </div>
+    ${fields.map((f,i)=>`
+      <div class="frow">
+        <span class="flabel">${f.lbl}</span>
+        <input type="number" id="manual_${sec}_${f.key}" placeholder="0"
+          value="${manual['m_'+f.key]||''}"
+          style="width:150px;padding:5px 9px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px;font-family:'DM Mono',monospace;outline:none;text-align:right"
+          oninput="saveManualField('${sec}','${f.key}',this.value)">
+      </div>`).join('')}`;
+}
+
+function saveManualField(sec, key, val) {
+  if (!uMappings[sec]) uMappings[sec] = {};
+  if (!uExtracted['__manual__']) uExtracted['__manual__'] = [];
+  // Store manual values with special prefix key
+  const n = parseFloat(val);
+  if (!isNaN(n)) {
+    uMappings[sec]['m_'+key] = key;
+    // Find or create the manual row
+    let mIdx = uExtracted['__manual__'].findIndex(r=>r._key===key);
+    if (mIdx<0) { uExtracted['__manual__'].push({raw:key, val:n, _key:key, _manual:true}); }
+    else uExtracted['__manual__'][mIdx].val = n;
+  }
+}
+
+function setMapping(idx, val, el){
   if(!uMappings[uMapSection]) uMappings[uMapSection]={};
-  uMappings[uMapSection][idx]=val||null;
+  if(val) uMappings[uMapSection][idx]=val;
+  else delete uMappings[uMapSection][idx];
   el.className='std-sel'+(val?' ok':'');
+  // Update badge count
+  const total = ['eerr','balance','flujo','notas'].reduce((s,sec)=>s+Object.values(uMappings[sec]||{}).filter(Boolean).length,0);
+  const badge = document.getElementById('mapBadge');
+  if(badge) badge.textContent = total+' campos mapeados';
 }
 
 // Step 4 — Confirm & Save
