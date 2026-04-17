@@ -6,6 +6,8 @@
 <title>Análisis Financiero</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 :root {
   --bg:#f5f6f8; --bg2:#ffffff; --bg3:#f0f2f5; --bg4:#e8eaed;
@@ -410,6 +412,92 @@ body.dark {
   --red:#ff5c5c; --red2:rgba(255,92,92,0.12);
   --amber:#f5a623; --amber2:rgba(245,166,35,0.12);
 }
+
+/* ── BALANCES VIEW ── */
+.bal-view{padding:1.5rem;max-width:1200px;margin:0 auto;display:none}
+.bal-view.active{display:block}
+.bal-two-col{display:grid;grid-template-columns:300px 1fr;gap:1.25rem;align-items:start}
+.bal-tree-wrap{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:1rem;position:sticky;top:60px}
+.bal-search{width:100%;padding:7px 12px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:.75rem}
+.bal-search:focus{border-color:var(--green)}
+.tree-item{font-size:13px;cursor:pointer;border-radius:6px;transition:background 0.1s;user-select:none}
+.tree-co{display:flex;align-items:center;gap:6px;padding:7px 8px;font-weight:500;color:var(--text)}
+.tree-co:hover{background:var(--bg3)}
+.tree-co.open{color:var(--green)}
+.tree-co-icon{font-size:11px;color:var(--text3);transition:transform 0.15s;display:inline-block;width:12px}
+.tree-co.open .tree-co-icon{transform:rotate(90deg)}
+.tree-years{display:none;padding-left:20px}
+.tree-years.open{display:block}
+.tree-year{display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:12px;color:var(--text2);cursor:pointer;border-radius:5px}
+.tree-year:hover{background:var(--bg3)}
+.tree-year.open{color:var(--green);font-weight:500}
+.tree-year-icon{font-size:10px;color:var(--text3);width:10px;transition:transform 0.15s}
+.tree-year.open .tree-year-icon{transform:rotate(90deg)}
+.tree-periods{display:none;padding-left:16px}
+.tree-periods.open{display:block}
+.tree-period{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;font-size:11px;color:var(--text3);cursor:pointer;border-radius:4px}
+.tree-period:hover{background:var(--bg3);color:var(--text)}
+.tree-period.selected{background:var(--green2);color:var(--green)}
+.period-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:var(--bg3);color:var(--text3)}
+.period-badge.anual{background:var(--blue2);color:var(--blue)}
+.bal-empty-tree{font-size:12px;color:var(--text3);text-align:center;padding:1.5rem 0;line-height:1.7}
+/* Upload form */
+.bal-form-wrap{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem}
+.bal-tabs{display:flex;border-bottom:0.5px solid var(--border);margin-bottom:1.25rem}
+.bal-tab{padding:8px 16px;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-0.5px}
+.bal-tab.active{color:var(--green);border-bottom-color:var(--green)}
+.pin-gate{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2.5rem;gap:12px;text-align:center}
+.pin-gate h3{font-size:16px;font-weight:500}
+.pin-gate p{font-size:13px;color:var(--text3)}
+.pin-input{font-family:'DM Mono',monospace;font-size:22px;letter-spacing:8px;text-align:center;width:160px;padding:10px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius);color:var(--text);outline:none}
+.pin-input:focus{border-color:var(--green)}
+.pin-error{font-size:12px;color:var(--red);display:none}
+/* Steps */
+.step-bar{display:flex;gap:0;margin-bottom:1.25rem}
+.step-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);flex:1}
+.step-item.done .sn{background:var(--green);border-color:var(--green);color:#fff}
+.step-item.active{color:var(--text);font-weight:500}
+.step-item.active .sn{border-color:var(--green);color:var(--green)}
+.sn{width:20px;height:20px;border-radius:50%;border:0.5px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;flex-shrink:0}
+.step-sep{flex:1;height:0.5px;background:var(--border);margin:0 6px}
+.dropz{border:1.5px dashed var(--border2);border-radius:var(--radius);padding:2rem;text-align:center;cursor:pointer;transition:all 0.15s;background:var(--bg3)}
+.dropz:hover,.dropz.drag{border-color:var(--green);background:var(--green2)}
+.dropz-icon{font-size:24px;margin-bottom:6px;opacity:0.4}
+.dropz-title{font-size:13px;font-weight:500;margin-bottom:4px}
+.dropz-sub{font-size:11px;color:var(--text3)}
+.frow{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:0.5px solid var(--border);gap:8px}
+.frow:last-child{border:none}
+.flabel{font-size:12px;color:var(--text2)}
+.fval{font-size:12px;font-family:'DM Mono',monospace;font-weight:500}
+.fselect{padding:5px 9px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none}
+.fselect:focus{border-color:var(--green)}
+.verify-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;margin-bottom:6px;font-size:12px}
+.verify-ok{background:var(--green2);color:var(--green)}
+.verify-warn{background:var(--amber2);color:var(--amber)}
+.verify-err{background:var(--red2);color:var(--red)}
+.map-row{display:grid;grid-template-columns:1fr 24px 1fr;gap:8px;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--border)}
+.map-row:last-child{border:none}
+.raw-cell{font-size:11px;background:var(--bg3);border-radius:5px;padding:4px 8px}
+.raw-name{color:var(--text2);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.raw-num{color:var(--text3);font-family:'DM Mono',monospace;font-size:10px}
+.map-arrow{text-align:center;color:var(--text3);font-size:12px}
+.std-sel{width:100%;font-size:11px;padding:4px 7px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:5px;color:var(--text3);outline:none}
+.std-sel.ok{border-color:var(--green);color:var(--green)}
+.mtabs{display:flex;gap:2px;margin-bottom:.85rem;overflow-x:auto}
+.mtab{padding:5px 12px;font-size:11px;font-weight:500;background:var(--bg3);border:0.5px solid var(--border2);border-radius:20px;color:var(--text3);cursor:pointer;white-space:nowrap}
+.mtab.active{background:var(--blue2);border-color:var(--blue);color:var(--blue)}
+.prev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1rem}
+.prev-card{background:var(--bg3);border-radius:var(--radius);padding:.75rem}
+.prev-lbl{font-size:10px;color:var(--text3);margin-bottom:3px}
+.prev-val{font-size:15px;font-weight:500;font-family:'DM Mono',monospace}
+.btn-grp{display:flex;gap:8px;justify-content:flex-end;margin-top:1rem}
+.gb{padding:7px 16px;border-radius:var(--radius);font-size:12px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;border:0.5px solid var(--border2);background:transparent;color:var(--text)}
+.gb:hover{background:var(--bg3)}
+.gb-primary{background:var(--green);border-color:var(--green);color:#fff}
+.gb-primary:hover{opacity:0.88}
+.bal-detail{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;min-height:200px}
+@media(max-width:800px){.bal-two-col{grid-template-columns:1fr}.bal-tree-wrap{position:static}}
+
 </style>
 </head>
 <body>
@@ -441,6 +529,7 @@ body.dark {
 <div style="display:flex;gap:4px;padding:0 1.5rem;height:40px;align-items:center;border-bottom:0.5px solid var(--border);background:var(--bg2)">
   <button id="navAnalysis" onclick="switchView('analysis')" style="padding:6px 16px;font-size:12px;font-weight:500;background:var(--green2);color:var(--green);border:none;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif">📊 Análisis</button>
   <button id="navComparator" onclick="switchView('comparator')" style="padding:6px 16px;font-size:12px;font-weight:500;background:transparent;color:var(--text3);border:none;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif">⇄ Comparador</button>
+  <button id="navBalances" onclick="switchView('balances')" style="padding:6px 16px;font-size:12px;font-weight:500;background:transparent;color:var(--text3);border:none;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif">📁 Balances</button>
 </div>
 
 <div class="status-bar">
@@ -451,6 +540,43 @@ body.dark {
   <div class="status-right">
     <span id="fxStatus"></span>
     <span>Alpha Vantage · BCRA</span>
+  </div>
+</div>
+
+<!-- BALANCES VIEW -->
+<div class="bal-view" id="balancesView">
+  <div class="bal-two-col">
+    <!-- LEFT: tree browser -->
+    <div class="bal-tree-wrap">
+      <input class="bal-search" id="balSearch" placeholder="Buscar empresa..." oninput="filterBalTree(this.value)">
+      <div id="balTree"><div class="bal-empty-tree">Todavía no hay balances cargados.<br>Usá el formulario para agregar el primero.</div></div>
+    </div>
+    <!-- RIGHT: tabs + form -->
+    <div>
+      <div class="bal-form-wrap">
+        <div class="bal-tabs">
+          <div class="bal-tab active" id="btabVer" onclick="switchBalTab('ver',this)">📊 Ver balance</div>
+          <div class="bal-tab" id="btabCargar" onclick="switchBalTab('cargar',this)">↑ Cargar balance</div>
+        </div>
+        <div id="balTabVer">
+          <div style="font-size:13px;color:var(--text3);padding:2rem;text-align:center">Seleccioná una empresa y período del árbol para ver el balance.</div>
+        </div>
+        <div id="balTabCargar" style="display:none">
+          <div id="pinGate" class="pin-gate">
+            <div style="font-size:28px;opacity:0.2">🔒</div>
+            <h3>Acceso restringido</h3>
+            <p>Ingresá el PIN para cargar balances</p>
+            <input class="pin-input" id="pinInput" type="password" maxlength="6" placeholder="••••••" oninput="checkPin(this.value)">
+            <div class="pin-error" id="pinError">PIN incorrecto</div>
+          </div>
+          <div id="uploadForm" style="display:none">
+            <div class="step-bar" id="stepBar"></div>
+            <div id="stepContent"></div>
+          </div>
+        </div>
+      </div>
+      <div class="bal-detail" id="balDetail" style="display:none;margin-top:1.25rem"></div>
+    </div>
   </div>
 </div>
 
@@ -1972,14 +2098,20 @@ function initTheme() {
 function switchView(view) {
   const av = document.getElementById('analysisView');
   const cv = document.getElementById('comparatorView');
+  const bv = document.getElementById('balancesView');
   const na = document.getElementById('navAnalysis');
   const nc = document.getElementById('navComparator');
-  av.style.display = 'none'; cv.classList.remove('active');
-  na.classList.remove('active'); nc.classList.remove('active');
-  if (view === 'analysis') {
-    av.style.display = ''; na.classList.add('active');
+  const nb = document.getElementById('navBalances');
+  av.style.display='none'; cv.classList.remove('active'); bv.classList.remove('active');
+  [na,nc,nb].forEach(b=>b&&b.classList.remove('active'));
+  const activeStyle='background:var(--green2);color:var(--green)';
+  const idleStyle='background:transparent;color:var(--text3)';
+  if(view==='analysis'){
+    av.style.display=''; na.style.cssText+=';'+activeStyle;
+  } else if(view==='comparator'){
+    cv.classList.add('active'); nc.style.cssText+=';'+activeStyle; renderComparator();
   } else {
-    cv.classList.add('active'); nc.classList.add('active'); renderComparator();
+    bv.classList.add('active'); nb.style.cssText+=';'+activeStyle; renderBalTree();
   }
 }
 
@@ -2307,6 +2439,589 @@ async function runComparison() {
       });
     });
   }, 80);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BALANCES MODULE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const BAL_PIN = '1234';          // ← CAMBIAR antes de publicar
+const BAL_STORE_KEY = 'arg_balances_v1';
+const BAL_MAP_KEY   = 'arg_bal_mappings_v1';
+
+// ── Field definitions ─────────────────────────────────────────────────────────
+const STD_FIELDS = {
+  eerr: [
+    {key:'revenue',      lbl:'Revenue / Ingresos totales'},
+    {key:'cogs',         lbl:'Costo de ventas'},
+    {key:'gross_profit', lbl:'Gross Profit / Resultado bruto'},
+    {key:'ebit',         lbl:'EBIT / Resultado operativo'},
+    {key:'da',           lbl:'D&A / Amortizaciones'},
+    {key:'interest_exp', lbl:'Intereses pagados (gasto)'},
+    {key:'interest_inc', lbl:'Ingreso por intereses'},
+    {key:'interest_net', lbl:'Intereses netos'},
+    {key:'tax',          lbl:'Impuesto a las ganancias'},
+    {key:'net_income',   lbl:'Net Income / Resultado del ejercicio'},
+  ],
+  balance: [
+    {key:'cash',             lbl:'Caja y equivalentes'},
+    {key:'current_assets',   lbl:'Activo corriente'},
+    {key:'non_current_assets',lbl:'Activo no corriente'},
+    {key:'total_assets',     lbl:'Activo total'},
+    {key:'current_liab',     lbl:'Pasivo corriente'},
+    {key:'non_current_liab', lbl:'Pasivo no corriente'},
+    {key:'total_liab',       lbl:'Total pasivo'},
+    {key:'debt_st',          lbl:'Deuda financiera CP'},
+    {key:'debt_lt',          lbl:'Deuda financiera LP'},
+    {key:'equity',           lbl:'Patrimonio neto'},
+  ],
+  flujo: [
+    {key:'cfo',             lbl:'Flujo operativo (FCO)'},
+    {key:'capex',           lbl:'Capex (adquisición bienes de uso)'},
+    {key:'debt_repay',      lbl:'Pago de préstamos'},
+    {key:'debt_proceeds',   lbl:'Toma de préstamos'},
+    {key:'interest_paid',   lbl:'Pago de intereses'},
+    {key:'interest_received',lbl:'Cobro de intereses'},
+    {key:'dividends',       lbl:'Dividendos pagados'},
+    {key:'cff',             lbl:'Flujo de financiamiento'},
+  ],
+  notas: [
+    {key:'fin_income',   lbl:'Ingreso financiero por intereses'},
+    {key:'fin_expense',  lbl:'Egreso financiero por intereses'},
+    {key:'fin_net',      lbl:'Resultado financiero neto'},
+    {key:'fx_result',    lbl:'Diferencia de cambio'},
+  ],
+};
+
+// ── Storage helpers ────────────────────────────────────────────────────────────
+function balGetAll()  { try{ return JSON.parse(localStorage.getItem(BAL_STORE_KEY)||'{}'); }catch{ return {}; } }
+function balSave(db)  { localStorage.setItem(BAL_STORE_KEY, JSON.stringify(db)); }
+function mapGetAll()  { try{ return JSON.parse(localStorage.getItem(BAL_MAP_KEY)||'{}'); }catch{ return {}; } }
+function mapSave(db)  { localStorage.setItem(BAL_MAP_KEY, JSON.stringify(db)); }
+
+function balKey(co, year, q) { return `${co}||${year}||${q}`; }
+function balPeriodLabel(q) {
+  if(q==='Q4'||q==='Anual') return 'Anual / Q4';
+  return q;
+}
+
+// ── Tree renderer ─────────────────────────────────────────────────────────────
+function renderBalTree() {
+  const db = balGetAll();
+  const tree = document.getElementById('balTree');
+  if(!tree) return;
+  const companies = {};
+  Object.entries(db).forEach(([k,v]) => {
+    const [co,year,q] = k.split('||');
+    if(!companies[co]) companies[co] = {};
+    if(!companies[co][year]) companies[co][year] = [];
+    companies[co][year].push({q, key:k, data:v});
+  });
+  if(!Object.keys(companies).length) {
+    tree.innerHTML='<div class="bal-empty-tree">Todavía no hay balances cargados.<br>Usá "Cargar balance" para agregar el primero.</div>';
+    return;
+  }
+  tree.innerHTML = Object.keys(companies).sort().map(co => {
+    const years = companies[co];
+    return `<div class="tree-item" id="tco_${co.replace(/\s/g,'_')}">
+      <div class="tree-co" onclick="toggleTreeCo(this)">
+        <span class="tree-co-icon">▶</span>
+        <span>${co}</span>
+        <span style="margin-left:auto;font-size:10px;color:var(--text3)">${Object.keys(years).length} año${Object.keys(years).length>1?'s':''}</span>
+      </div>
+      <div class="tree-years">
+        ${Object.keys(years).sort().reverse().map(yr => {
+          const periods = years[yr];
+          const hasAnual = periods.some(p=>p.q==='Q4'||p.q==='Anual');
+          return `<div class="tree-year" onclick="toggleTreeYear(this)">
+            <span class="tree-year-icon">▶</span>
+            <span>${yr}</span>
+            ${hasAnual?'<span class="period-badge anual" style="margin-left:auto">Anual</span>':''}
+          </div>
+          <div class="tree-periods">
+            ${periods.sort((a,b)=>a.q>b.q?1:-1).map(p=>`
+              <div class="tree-period" onclick="viewBalance('${p.key}')">
+                ${balPeriodLabel(p.q)}
+                <span class="period-badge">${p.data.moneda||'—'}</span>
+              </div>`).join('')}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleTreeCo(el) {
+  el.classList.toggle('open');
+  el.nextElementSibling.classList.toggle('open');
+}
+function toggleTreeYear(el) {
+  el.classList.toggle('open');
+  el.nextElementSibling.classList.toggle('open');
+}
+
+function filterBalTree(q) {
+  const items = document.querySelectorAll('.tree-item');
+  items.forEach(item => {
+    const co = item.querySelector('.tree-co span:nth-child(2)')?.textContent||'';
+    item.style.display = co.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+// ── View a saved balance ───────────────────────────────────────────────────────
+function viewBalance(key) {
+  const db = balGetAll();
+  const entry = db[key];
+  if(!entry) return;
+  const [co,year,q] = key.split('||');
+  const detail = document.getElementById('balDetail');
+  if(!detail) return;
+  detail.style.display='block';
+
+  const fmt = v => v===null||v===undefined ? '—' : Number(v).toLocaleString('es-AR',{maximumFractionDigits:0});
+
+  const secs = [
+    {title:'Estado de Resultados', fields:[
+      ['Revenue',entry.revenue],['Gross Profit',entry.gross_profit],
+      ['EBIT',entry.ebit],['D&A',entry.da],
+      ['Intereses pagados',entry.interest_exp],['Net Income',entry.net_income],
+    ]},
+    {title:'Balance', fields:[
+      ['Caja',entry.cash],['Activo corriente',entry.current_assets],
+      ['Activo no corriente',entry.non_current_assets],['Activo total',entry.total_assets],
+      ['Pasivo corriente',entry.current_liab],['Pasivo no corriente',entry.non_current_liab],
+      ['Total pasivo',entry.total_liab],['Deuda CP',entry.debt_st],
+      ['Deuda LP',entry.debt_lt],['Patrimonio neto',entry.equity],
+    ]},
+    {title:'Flujo de Efectivo', fields:[
+      ['FCO',entry.cfo],['Capex',entry.capex],
+      ['Pago préstamos',entry.debt_repay],['Toma préstamos',entry.debt_proceeds],
+      ['Intereses pagados',entry.interest_paid],['Dividendos',entry.dividends],
+    ]},
+  ];
+
+  detail.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:16px;font-weight:600">${co}</div>
+        <div style="font-size:12px;color:var(--text3)">${year} · ${balPeriodLabel(q)} · ${entry.moneda||''} ${entry.unidad||''}</div>
+      </div>
+      <button onclick="deleteBalance('${key}')" style="padding:5px 12px;font-size:11px;background:var(--red2);border:0.5px solid rgba(214,51,51,0.3);border-radius:6px;color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif">Eliminar</button>
+    </div>
+    ${secs.map(sec=>`
+      <div style="margin-bottom:1.25rem">
+        <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:.5rem">${sec.title}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
+          ${sec.fields.map(([lbl,val])=>`
+            <div style="background:var(--bg3);border-radius:var(--radius);padding:.65rem .85rem">
+              <div style="font-size:10px;color:var(--text3);margin-bottom:3px">${lbl}</div>
+              <div style="font-size:14px;font-weight:500;font-family:'DM Mono',monospace">${fmt(val)}</div>
+            </div>`).join('')}
+        </div>
+      </div>`).join('')}`;
+
+  // Highlight selected period in tree
+  document.querySelectorAll('.tree-period').forEach(el=>el.classList.remove('selected'));
+  document.querySelectorAll('.tree-period').forEach(el=>{
+    if(el.getAttribute('onclick')?.includes(key)) el.classList.add('selected');
+  });
+}
+
+function deleteBalance(key) {
+  if(!confirm('¿Eliminar este balance?')) return;
+  const db = balGetAll();
+  delete db[key];
+  balSave(db);
+  renderBalTree();
+  const detail = document.getElementById('balDetail');
+  if(detail) detail.style.display='none';
+}
+
+// ── PIN gate ──────────────────────────────────────────────────────────────────
+let pinUnlocked = false;
+function checkPin(val) {
+  if(val.length < BAL_PIN.length) return;
+  if(val === BAL_PIN) {
+    pinUnlocked = true;
+    document.getElementById('pinGate').style.display='none';
+    document.getElementById('uploadForm').style.display='block';
+    initUploadForm();
+  } else {
+    document.getElementById('pinError').style.display='block';
+    document.getElementById('pinInput').value='';
+    setTimeout(()=>document.getElementById('pinError').style.display='none', 2000);
+  }
+}
+
+// ── Upload form steps ─────────────────────────────────────────────────────────
+let uStep=1, uFile=null, uExtracted={}, uMeta={}, uMappings={}, uMapSection='eerr';
+
+function initUploadForm() { uStep=1; renderStep(); }
+
+function renderStep() {
+  const steps=[
+    {n:1,lbl:'Subir archivo'},
+    {n:2,lbl:'Verificar datos'},
+    {n:3,lbl:'Mapear campos'},
+    {n:4,lbl:'Confirmar'},
+  ];
+  document.getElementById('stepBar').innerHTML = steps.map((s,i)=>`
+    ${i>0?'<div class="step-sep"></div>':''}
+    <div class="step-item ${uStep>s.n?'done':uStep===s.n?'active':''}">
+      <span class="sn">${uStep>s.n?'✓':s.n}</span>
+      <span>${s.lbl}</span>
+    </div>`).join('');
+
+  const cont = document.getElementById('stepContent');
+  if(uStep===1) renderStepUpload(cont);
+  else if(uStep===2) renderStepVerify(cont);
+  else if(uStep===3) renderStepMap(cont);
+  else renderStepConfirm(cont);
+}
+
+// Step 1 — Upload
+function renderStepUpload(cont) {
+  cont.innerHTML=`
+    <div class="dropz" id="udropz" onclick="document.getElementById('ufile').click()"
+      ondragover="event.preventDefault();this.classList.add('drag')"
+      ondragleave="this.classList.remove('drag')"
+      ondrop="handleUDrop(event)">
+      <div class="dropz-icon">↑</div>
+      <div class="dropz-title">${uFile?uFile.name:'Arrastrá o hacé click para subir'}</div>
+      <div class="dropz-sub">${uFile?(uFile.size/1024).toFixed(0)+' KB — listo para procesar':'Excel (.xlsx, .xls) o PDF con texto seleccionable'}</div>
+      <input type="file" id="ufile" style="display:none" accept=".xlsx,.xls,.pdf" onchange="handleUFile(this.files[0])">
+    </div>
+    <div class="btn-grp"><button class="gb gb-primary" onclick="processFile()" ${!uFile?'disabled style="opacity:0.4;cursor:not-allowed"':''}>Procesar archivo →</button></div>`;
+}
+
+function handleUDrop(e) {
+  e.preventDefault();
+  document.getElementById('udropz').classList.remove('drag');
+  handleUFile(e.dataTransfer.files[0]);
+}
+function handleUFile(file) {
+  if(!file) return;
+  uFile=file;
+  renderStep();
+}
+
+async function processFile() {
+  if(!uFile) return;
+  const ext = uFile.name.split('.').pop().toLowerCase();
+  document.getElementById('stepContent').innerHTML='<div style="text-align:center;padding:2rem;color:var(--text3)"><div class="spinner"></div><div style="margin-top:12px;font-size:13px">Procesando archivo...</div></div>';
+
+  try {
+    if(ext==='pdf') {
+      await extractPDF();
+    } else {
+      await extractExcel();
+    }
+    uStep=2; renderStep();
+  } catch(e) {
+    document.getElementById('stepContent').innerHTML=`<div class="err-box">Error al procesar: ${e.message}</div><div class="btn-grp"><button class="gb" onclick="uStep=1;renderStep()">← Volver</button></div>`;
+  }
+}
+
+// Extract from Excel
+async function extractExcel() {
+  return new Promise((resolve,reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, {type:'array'});
+        uExtracted = {};
+        wb.SheetNames.forEach(sn => {
+          const ws = wb.Sheets[sn];
+          const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+          const items = [];
+          rows.forEach(row => {
+            const textCol = row.findIndex(c=>typeof c==='string'&&c.trim().length>3);
+            if(textCol<0) return;
+            const numCols = row.map((c,i)=>{
+              if(i===textCol) return null;
+              const n = typeof c==='number'?c:parseFloat(String(c).replace(/[$.,()\s]/g,'').replace(/\./g,'').replace(',','.'));
+              return isNaN(n)?null:n;
+            }).filter(x=>x!==null);
+            if(!numCols.length) return;
+            const label = String(row[textCol]).trim();
+            if(label.length<3||/^[\d\s]+$/.test(label)) return;
+            items.push({raw:label, val:numCols[0], vals:numCols});
+          });
+          if(items.length) uExtracted[sn]=items;
+        });
+        // Try to auto-detect meta from content
+        autoDetectMeta();
+        resolve();
+      } catch(err){ reject(err); }
+    };
+    reader.onerror=()=>reject(new Error('Error leyendo archivo'));
+    reader.readAsArrayBuffer(uFile);
+  });
+}
+
+// Extract from PDF
+async function extractPDF() {
+  return new Promise((resolve,reject) => {
+    const reader = new FileReader();
+    reader.onload = async e => {
+      try {
+        if(typeof pdfjsLib==='undefined') throw new Error('pdf.js no cargado');
+        pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        const pdf = await pdfjsLib.getDocument({data:e.target.result}).promise;
+        const lines = [];
+        for(let i=1;i<=Math.min(pdf.numPages,60);i++) {
+          const page = await pdf.getPage(i);
+          const tc = await page.getTextContent();
+          // Group items by Y position (same line)
+          const byY = {};
+          tc.items.forEach(item => {
+            const y = Math.round(item.transform[5]);
+            if(!byY[y]) byY[y]=[];
+            byY[y].push(item.str);
+          });
+          Object.keys(byY).sort((a,b)=>b-a).forEach(y=>{
+            lines.push(byY[y].join(' '));
+          });
+        }
+        // Parse lines into label+value pairs
+        const items = [];
+        lines.forEach(line => {
+          const m = line.match(/^(.+?)\s+([-\(]?\$?[\d.,]+[\)M]?)\s*$/);
+          if(!m) return;
+          const label = m[1].trim();
+          if(label.length<3||/^[\d\s\.]+$/.test(label)) return;
+          const numStr = m[2].replace(/[$\s]/g,'').replace(/\./g,'').replace(',','.');
+          const isNeg = numStr.includes('(');
+          const n = parseFloat(numStr.replace(/[()]/g,'')) * (isNeg?-1:1);
+          if(!isNaN(n)) items.push({raw:label, val:n});
+        });
+        uExtracted = {'PDF': items};
+        autoDetectMeta();
+        resolve();
+      } catch(err){ reject(err); }
+    };
+    reader.onerror=()=>reject(new Error('Error leyendo PDF'));
+    reader.readAsArrayBuffer(uFile);
+  });
+}
+
+function autoDetectMeta() {
+  // Try to detect moneda, unidad, período from raw text
+  const allText = Object.values(uExtracted).flat().map(r=>r.raw).join(' ').toLowerCase();
+  uMeta.moneda_detected = allText.includes('usd')||allText.includes('dólar')||allText.includes('dollar') ? 'USD' : 'ARS';
+  uMeta.unidad_detected = allText.includes('millones')||allText.includes('millions') ? 'Millones' : allText.includes('miles')||allText.includes('thousands') ? 'Miles' : '?';
+  uMeta.consolidado_detected = allText.includes('consolidado')||allText.includes('consolidated') ? 'Consolidado' : allText.includes('individual')||allText.includes('separate') ? 'Individual' : '?';
+  // Period detection
+  const yearMatch = (Object.values(uExtracted).flat().map(r=>r.raw).join(' ')).match(/20(1[5-9]|2[0-9])/);
+  uMeta.year_detected = yearMatch ? yearMatch[0] : new Date().getFullYear().toString();
+}
+
+// Step 2 — Verify
+function renderStepVerify(cont) {
+  const sheets = Object.keys(uExtracted);
+  const totalRows = Object.values(uExtracted).flat().length;
+  const companies_list = [...new Set([...COMPANIES.map(c=>c.name), 'YPF S.A.','Vista Energy','Pampa Energía','TGS','Edenor','Pluspetrol','Tecpetrol','PAE','MSU Energy','CGC','Albanesi','Genneia','Clisa','Telecom Argentina'])];
+
+  cont.innerHTML=`
+    <div style="margin-bottom:1rem">
+      <div class="verify-row verify-ok">✓ Archivo procesado: ${totalRows} filas extraídas${sheets.length>1?' en '+sheets.length+' hojas':''}</div>
+      ${uMeta.moneda_detected?`<div class="verify-row ${uMeta.moneda_detected!=='?'?'verify-ok':'verify-warn'}">${uMeta.moneda_detected!=='?'?'✓':'⚠'} Moneda detectada: <strong style="margin-left:4px">${uMeta.moneda_detected}</strong></div>`:''}
+      ${uMeta.unidad_detected?`<div class="verify-row ${uMeta.unidad_detected!=='?'?'verify-ok':'verify-warn'}">${uMeta.unidad_detected!=='?'?'✓':'⚠'} Unidad detectada: <strong style="margin-left:4px">${uMeta.unidad_detected||'No detectada — confirmá abajo'}</strong></div>`:''}
+      <div class="verify-row ${uMeta.consolidado_detected!=='?'?'verify-ok':'verify-warn'}">${uMeta.consolidado_detected!=='?'?'✓':'⚠'} Tipo: <strong style="margin-left:4px">${uMeta.consolidado_detected}</strong></div>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:.75rem">Confirmá o corregí los datos detectados:</div>
+    <div>
+      <div class="frow"><span class="flabel">Empresa</span>
+        <select class="fselect" id="mEmpresa" style="width:220px">
+          ${companies_list.map(n=>`<option>${n}</option>`).join('')}
+          <option value="__new__">+ Nueva empresa...</option>
+        </select>
+      </div>
+      <div class="frow" id="newCoRow" style="display:none"><span class="flabel">Nombre de empresa</span><input id="mEmpresaNew" placeholder="Ej: Pluspetrol S.A." style="padding:5px 9px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px;outline:none;width:220px"></div>
+      <div class="frow"><span class="flabel">Año fiscal</span>
+        <select class="fselect" id="mAnio">${[2024,2023,2022,2021,2020,2019].map(y=>`<option ${y==uMeta.year_detected?'selected':''}>${y}</option>`).join('')}</select>
+      </div>
+      <div class="frow"><span class="flabel">Período</span>
+        <select class="fselect" id="mTrimestre">
+          <option value="Q4">Anual / Q4</option>
+          <option value="Q1">Q1 (ene-mar)</option>
+          <option value="Q2">Q2 (ene-jun)</option>
+          <option value="Q3">Q3 (ene-sep)</option>
+        </select>
+      </div>
+      <div class="frow"><span class="flabel">Moneda</span>
+        <select class="fselect" id="mMoneda">
+          <option ${uMeta.moneda_detected==='ARS'?'selected':''}>ARS</option>
+          <option ${uMeta.moneda_detected==='USD'?'selected':''}>USD</option>
+        </select>
+      </div>
+      <div class="frow"><span class="flabel">Unidad</span>
+        <select class="fselect" id="mUnidad">
+          <option ${uMeta.unidad_detected==='Millones'?'selected':''}>Millones</option>
+          <option ${uMeta.unidad_detected==='Miles'?'selected':''}>Miles</option>
+          <option>Unidades</option>
+        </select>
+      </div>
+      <div class="frow"><span class="flabel">Tipo</span>
+        <select class="fselect" id="mCons">
+          <option ${uMeta.consolidado_detected==='Consolidado'?'selected':''}>Consolidado</option>
+          <option ${uMeta.consolidado_detected==='Individual'?'selected':''}>Individual</option>
+        </select>
+      </div>
+      ${sheets.length>1?`<div class="frow"><span class="flabel">Hoja activa</span>
+        <select class="fselect" id="mSheet">${sheets.map(s=>`<option>${s}</option>`).join('')}</select>
+      </div>`:''}
+    </div>
+    <div class="btn-grp">
+      <button class="gb" onclick="uStep=1;renderStep()">← Volver</button>
+      <button class="gb gb-primary" onclick="saveMetaAndContinue()">Continuar → Mapear campos</button>
+    </div>`;
+
+  document.getElementById('mEmpresa').addEventListener('change', function(){
+    document.getElementById('newCoRow').style.display = this.value==='__new__'?'flex':'none';
+  });
+}
+
+function saveMetaAndContinue() {
+  const coEl = document.getElementById('mEmpresa');
+  const co = coEl.value==='__new__'
+    ? (document.getElementById('mEmpresaNew')?.value||'Nueva empresa')
+    : coEl.value;
+  const year = document.getElementById('mAnio').value;
+  const q    = document.getElementById('mTrimestre').value;
+  // Check if already exists
+  const db = balGetAll();
+  const key = balKey(co, year, q);
+  if(db[key]) {
+    if(!confirm(`Ya existe un balance para ${co} ${year} ${q}. ¿Reemplazar?`)) return;
+  }
+  uMeta.co=co; uMeta.year=year; uMeta.q=q;
+  uMeta.moneda=document.getElementById('mMoneda').value;
+  uMeta.unidad=document.getElementById('mUnidad').value;
+  uMeta.cons=document.getElementById('mCons').value;
+  uMeta.sheet=document.getElementById('mSheet')?.value || Object.keys(uExtracted)[0];
+  // Load saved mappings for this company if exists
+  const maps = mapGetAll();
+  uMappings = maps[co] ? JSON.parse(JSON.stringify(maps[co])) : {eerr:{},balance:{},flujo:{},notas:{}};
+  uStep=3; renderStep();
+}
+
+// Step 3 — Map
+function renderStepMap(cont) {
+  cont.innerHTML=`
+    <div style="font-size:12px;color:var(--text3);margin-bottom:.75rem">
+      Asigná cada línea extraída al campo estándar correspondiente. Las asignaciones se guardan por empresa.
+    </div>
+    <div class="mtabs" id="mtabs">
+      ${['eerr','balance','flujo','notas'].map((s,i)=>`<div class="mtab ${i===0?'active':''}" onclick="switchMapTab('${s}',this)">${{eerr:'EERR',balance:'Balance',flujo:'Flujo de efectivo',notas:'Notas financieras'}[s]}</div>`).join('')}
+    </div>
+    <div id="mapRows" style="max-height:360px;overflow-y:auto"></div>
+    <div class="btn-grp">
+      <button class="gb" onclick="uStep=2;renderStep()">← Volver</button>
+      <button class="gb gb-primary" onclick="uStep=4;renderStep()">Continuar → Confirmar</button>
+    </div>`;
+  uMapSection='eerr';
+  renderMapRows();
+}
+
+function switchMapTab(sec,el){
+  uMapSection=sec;
+  document.querySelectorAll('.mtab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  renderMapRows();
+}
+
+function renderMapRows() {
+  const rows = (uExtracted[uMeta.sheet]||Object.values(uExtracted)[0]||[]);
+  const fields = STD_FIELDS[uMapSection];
+  const mapped = uMappings[uMapSection]||{};
+  document.getElementById('mapRows').innerHTML = rows.map((r,i)=>`
+    <div class="map-row">
+      <div class="raw-cell">
+        <div class="raw-name" title="${r.raw}">${r.raw}</div>
+        <div class="raw-num">${r.val!==undefined?r.val.toLocaleString('es-AR',{maximumFractionDigits:2}):''}</div>
+      </div>
+      <div class="map-arrow">→</div>
+      <select class="std-sel ${mapped[i]?'ok':''}" onchange="setMapping(${i},this.value,this)">
+        <option value="">— Ignorar —</option>
+        ${fields.map(f=>`<option value="${f.key}" ${mapped[i]===f.key?'selected':''}>${f.lbl}</option>`).join('')}
+      </select>
+    </div>`).join('');
+}
+
+function setMapping(idx,val,el){
+  if(!uMappings[uMapSection]) uMappings[uMapSection]={};
+  uMappings[uMapSection][idx]=val||null;
+  el.className='std-sel'+(val?' ok':'');
+}
+
+// Step 4 — Confirm & Save
+function renderStepConfirm(cont) {
+  const rows = uExtracted[uMeta.sheet]||Object.values(uExtracted)[0]||[];
+  // Build flat data object from mappings
+  const data = {};
+  ['eerr','balance','flujo','notas'].forEach(sec=>{
+    const m = uMappings[sec]||{};
+    Object.entries(m).forEach(([idx,key])=>{
+      if(key && rows[idx]!==undefined) data[key]=rows[idx].val;
+    });
+  });
+  // Derived fields
+  if(data.cogs!==undefined&&data.revenue!==undefined&&!data.gross_profit) data.gross_profit=data.revenue+data.cogs;
+  if(data.debt_st!==undefined&&data.debt_lt!==undefined) data.total_debt=(data.debt_st||0)+(data.debt_lt||0);
+  if(data.total_debt!==undefined&&data.cash!==undefined) data.net_debt=data.total_debt-data.cash;
+  if(data.ebit!==undefined&&data.da!==undefined) data.ebitda=data.ebit+Math.abs(data.da);
+
+  const fmt = v=>v===undefined||v===null?'<span style="color:var(--text3)">—</span>':'<span style="color:var(--text)">'+Number(v).toLocaleString('es-AR',{maximumFractionDigits:0})+'</span>';
+  const mapped_count = Object.values(data).filter(v=>v!==undefined&&v!==null).length;
+
+  cont.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
+      <div style="font-size:14px;font-weight:500">${uMeta.co} · ${uMeta.year} · ${balPeriodLabel(uMeta.q)}</div>
+      <span style="font-size:11px;padding:2px 8px;background:var(--green2);color:var(--green);border-radius:4px">${uMeta.moneda} ${uMeta.unidad} · ${uMeta.cons}</span>
+      <span style="font-size:11px;color:var(--text3)">${mapped_count} campo${mapped_count!==1?'s':''} mapeados</span>
+    </div>
+    <div class="prev-grid">
+      ${[
+        ['Revenue',data.revenue],['EBITDA',data.ebitda],['EBIT',data.ebit],
+        ['Net Income',data.net_income],['Caja',data.cash],['Deuda LP',data.debt_lt],
+        ['Deuda Neta',data.net_debt],['Patrimonio',data.equity],['FCO',data.cfo],
+      ].map(([l,v])=>`<div class="prev-card"><div class="prev-lbl">${l}</div><div class="prev-val">${fmt(v)}</div></div>`).join('')}
+    </div>
+    <div class="btn-grp">
+      <button class="gb" onclick="uStep=3;renderStep()">← Ajustar mapeo</button>
+      <button class="gb gb-primary" onclick="saveBalance(${JSON.stringify(data).replace(/"/g,'&quot;')})">Guardar balance</button>
+    </div>`;
+  window._pendingBalData = data;
+}
+
+function saveBalance(data) {
+  const db = balGetAll();
+  const key = balKey(uMeta.co, uMeta.year, uMeta.q);
+  db[key] = {...data, moneda:uMeta.moneda, unidad:uMeta.unidad, cons:uMeta.cons, _loaded: Date.now()};
+  balSave(db);
+  // Save mappings for this company
+  const maps = mapGetAll();
+  maps[uMeta.co] = uMappings;
+  mapSave(maps);
+  // Reset form
+  uStep=1; uFile=null; uExtracted={}; uMeta={}; uMappings={};
+  // Show success and refresh tree
+  document.getElementById('uploadForm').innerHTML=`
+    <div style="text-align:center;padding:2rem;color:var(--green)">
+      <div style="font-size:28px;margin-bottom:10px">✓</div>
+      <div style="font-size:14px;font-weight:500;margin-bottom:6px">Balance guardado correctamente</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:1rem">${uMeta.co||''}</div>
+      <button class="gb gb-primary" onclick="document.getElementById('uploadForm').style.display='none';document.getElementById('pinGate').style.display='flex';pinUnlocked=false;renderBalTree()">Cargar otro balance</button>
+    </div>`;
+  renderBalTree();
+}
+
+function switchBalTab(tab, el) {
+  document.querySelectorAll('.bal-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('balTabVer').style.display   = tab==='ver'   ? '' : 'none';
+  document.getElementById('balTabCargar').style.display = tab==='cargar'? '' : 'none';
 }
 </script>
 </body>
