@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Análisis Financiero</title>
+<title>AnálisisARG — Modelización Financiera</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
@@ -500,34 +500,29 @@ body.dark {
 </head>
 <body>
 
+
 <div class="header">
-  <div class="logo">Análisis<span> Financiero</span></div>
+  <div class="logo">Análisis<span>ARG</span><sub>beta</sub></div>
   <div class="search-wrap">
     <span class="s-icon">⌕</span>
     <input class="search-input" id="searchInput" type="text"
       placeholder="Buscar empresa: YPF, Vista, Galicia..." autocomplete="off" />
     <div class="dropdown" id="dropdown"></div>
   </div>
-  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <div class="cache-info">
       <span class="cache-dot" id="cacheDot"></span>
       <span id="cacheCount">Sin caché</span>
     </div>
-    <button id="langBtn" onclick="toggleLang()"
-      style="padding:5px 11px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:8px;color:var(--text2);font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s">
-      🌐 EN
-    </button>
-    <button id="themeBtn" onclick="toggleTheme()"
-      style="padding:5px 11px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:8px;color:var(--text2);font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s">
-      ☾ Oscuro
-    </button>
+    <button class="theme-btn" id="langBtn" onclick="toggleLang()">🌐 EN</button>
+    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()">☾ Dark</button>
   </div>
 </div>
 
-<div style="display:flex;gap:4px;padding:0 1.5rem;height:40px;align-items:center;border-bottom:0.5px solid var(--border);background:var(--bg2)">
-  <button id="navAnalysis" onclick="switchView('analysis')" style="padding:6px 16px;font-size:12px;font-weight:500;background:var(--green2);color:var(--green);border:none;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif">📊 Análisis</button>
-  <button id="navComparator" onclick="switchView('comparator')" style="padding:6px 16px;font-size:12px;font-weight:500;background:transparent;color:var(--text3);border:none;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif">⇄ Comparador</button>
-  <button id="navBalances" onclick="switchView('balances')" style="padding:6px 16px;font-size:12px;font-weight:500;background:transparent;color:var(--text3);border:none;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif">📁 Balances</button>
+<div class="top-nav">
+  <button class="nav-btn active" id="navAnalysis" onclick="switchView('analysis')">📊 Análisis</button>
+  <button class="nav-btn" id="navComparator" onclick="switchView('comparator')">⇄ Comparador</button>
+  <button class="nav-btn" id="navBalances" onclick="switchView('balances')">📁 Balances</button>
 </div>
 
 <div class="status-bar">
@@ -540,16 +535,13 @@ body.dark {
     <span>Alpha Vantage · BCRA</span>
   </div>
 </div>
-
 <!-- BALANCES VIEW -->
 <div class="bal-view" id="balancesView">
   <div class="bal-two-col">
-    <!-- LEFT: tree browser -->
     <div class="bal-tree-wrap">
       <input class="bal-search" id="balSearch" placeholder="Buscar empresa..." oninput="filterBalTree(this.value)">
-      <div id="balTree"><div class="bal-empty-tree">Todavía no hay balances cargados.<br>Usá el formulario para agregar el primero.</div></div>
+      <div id="balTree"><div class="bal-empty-tree">Todavía no hay balances cargados.<br>Usá "Cargar balance" para agregar el primero.</div></div>
     </div>
-    <!-- RIGHT: tabs + form -->
     <div>
       <div class="bal-form-wrap">
         <div class="bal-tabs">
@@ -557,9 +549,7 @@ body.dark {
           <div class="bal-tab" id="btabCargar" onclick="switchBalTab('cargar',this)">↑ Cargar balance</div>
           <div class="bal-tab" id="btabIPC" onclick="switchBalTab('ipc',this)">📈 IPC / Inflación</div>
         </div>
-        <div id="balTabVer">
-          <div style="font-size:13px;color:var(--text3);padding:2rem;text-align:center">Seleccioná una empresa y período del árbol para ver el balance.</div>
-        </div>
+        <div id="balTabVer"><div style="font-size:13px;color:var(--text3);padding:2rem;text-align:center">Seleccioná una empresa y período del árbol para ver el balance.</div></div>
         <div id="balTabIPC" style="display:none;padding:.5rem 0"></div>
         <div id="balTabCargar" style="display:none">
           <div id="pinGate" class="pin-gate">
@@ -603,10 +593,9 @@ body.dark {
     </div>
 
     <div class="period-toggle">
-      <span class="toggle-label">Período:</span>
-      <div class="toggle-group">
-        <button class="tg-btn active" id="btnAnnual" onclick="setPeriod('annual',this)">Anual</button>
-        <button class="tg-btn" id="btnQuarterly" onclick="setPeriod('quarterly',this)">Trimestral</button>
+      
+        <button class="tg-btn active" onclick="setPeriod('annual',this)">Anual</button>
+        <button class="tg-btn" onclick="setPeriod('quarterly',this)">Trimestral</button>
       </div>
       <span class="toggle-label" style="margin-left:8px">Moneda:</span>
       <div class="toggle-group">
@@ -644,6 +633,8 @@ body.dark {
 </div>
 
 <script>
+
+
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 const API_KEY = 'N4BV0YYXANY0HGDR';
 const AV = 'https://www.alphavantage.co/query';
@@ -679,6 +670,8 @@ const COMPANIES = [
 // ── STATE ────────────────────────────────────────────────────────────────────
 let currentCompany = null;
 let currentPeriod = 'annual';   // 'annual' | 'quarterly'
+let selectedYear    = '';          // filter by year, '' = all
+let selectedQuarter = '';          // filter by quarter, '' = all
 let currentCurrency = 'usd';    // 'usd' | 'ars'
 let fetchedData = {};
 let fxRates = {};               // { '2024': { avg: 950, eop: 1031 }, ... }
@@ -906,9 +899,9 @@ function buildFromManualBalances(company) {
   return {
     overview,
     quote,
-    income:   { annualReports, quarterlyReports },
-    balance:  { annualReports, quarterlyReports },
-    cashflow: { annualReports, quarterlyReports },
+    income:   { income:   { annualReports, quarterlyReports } },
+    balance:  { balance:  { annualReports, quarterlyReports } },
+    cashflow: { cashflow: { annualReports, quarterlyReports } },
     _isManual: true,
   };
 }
@@ -998,9 +991,14 @@ function swTab(id, el) {
 
 function setPeriod(p, el) {
   currentPeriod = p;
+  selectedYear = ''; selectedQuarter = '';
   document.querySelectorAll('.toggle-group')[0].querySelectorAll('.tg-btn')
     .forEach(b => b.classList.remove('active'));
   el.classList.add('active');
+  const qSel = document.getElementById('quarterSelect');
+  const ySel = document.getElementById('yearSelect');
+  if (qSel) qSel.style.display = 'none';
+  if (ySel) ySel.value = '';
   if (currentCompany) renderAll(currentCompany);
 }
 
@@ -1016,11 +1014,45 @@ function setCurrency(c, el) {
 function getReports(data, key) {
   const src = data[key];
   if (!src) return [];
+  let reports;
   if (currentPeriod === 'annual') {
-    return (src.annualReports || []).slice(0, 5).reverse();
+    reports = (src.annualReports || []).slice(0, 5).reverse();
+    if (selectedYear) reports = reports.filter(r => (r.fiscalDateEnding||'').startsWith(selectedYear));
   } else {
-    return (src.quarterlyReports || []).slice(0, 8).reverse();
+    reports = (src.quarterlyReports || []).slice(0, 8).reverse();
+    if (selectedYear)    reports = reports.filter(r => (r.fiscalDateEnding||'').startsWith(selectedYear));
+    if (selectedQuarter) reports = reports.filter(r => {
+      const m = parseInt((r.fiscalDateEnding||'').slice(5,7));
+      const q = m<=3?'Q1':m<=6?'Q2':m<=9?'Q3':'Q4';
+      return q === selectedQuarter;
+    });
   }
+  return reports;
+}
+
+function setSelectedYear(val) {
+  selectedYear = val;
+  const qSel = document.getElementById('quarterSelect');
+  if (qSel) qSel.style.display = (val && currentPeriod==='quarterly') ? '' : 'none';
+  if (currentCompany) renderAll(currentCompany);
+}
+
+function setSelectedQuarter(val) {
+  selectedQuarter = val;
+  if (currentCompany) renderAll(currentCompany);
+}
+
+function populateYearSelector() {
+  const sel = document.getElementById('yearSelect');
+  if (!sel || !fetchedData._isManual) return;
+  const db = balGetAll();
+  const prefix = currentCompany.name + '||';
+  const years = [...new Set(
+    Object.keys(db).filter(k=>k.startsWith(prefix))
+      .map(k => k.split('||')[1])
+  )].sort().reverse();
+  sel.innerHTML = '<option value="">Todos los años</option>' +
+    years.map(y => `<option value="${y}" ${y===selectedYear?'selected':''}>${y}</option>`).join('');
 }
 
 function getLabel(report) {
@@ -1100,6 +1132,8 @@ async function selectCompany(ticker) {
 
 // ── RENDER ALL ────────────────────────────────────────────────────────────────
 function renderAll(company) {
+  // Populate year selector for manual balances
+  setTimeout(populateYearSelector, 50);
   const { overview, quote, income, balance, cashflow } = fetchedData;
   const q = quote['Global Quote'] || {};
   const price = num(q['05. price']);
@@ -2169,19 +2203,34 @@ function switchView(view) {
   const av = document.getElementById('analysisView');
   const cv = document.getElementById('comparatorView');
   const bv = document.getElementById('balancesView');
-  const na = document.getElementById('navAnalysis');
-  const nc = document.getElementById('navComparator');
-  const nb = document.getElementById('navBalances');
-  av.style.display='none'; cv.classList.remove('active'); bv.classList.remove('active');
-  [na,nc,nb].forEach(b=>b&&b.classList.remove('active'));
-  const activeStyle='background:var(--green2);color:var(--green)';
-  const idleStyle='background:transparent;color:var(--text3)';
+
+  // Hide all views
+  if(av) av.style.display='none';
+  if(cv) cv.classList.remove('active');
+  if(bv) bv.classList.remove('active');
+
+  // Reset nav button styles
+  const navBtns = ['navAnalysis','navComparator','navBalances'];
+  navBtns.forEach(id => {
+    const b = document.getElementById(id);
+    if(b) { b.style.background='transparent'; b.style.color='var(--text3)'; }
+  });
+
+  // Activate selected view
   if(view==='analysis'){
-    av.style.display=''; na.style.cssText+=';'+activeStyle;
+    if(av) av.style.display='';
+    const b=document.getElementById('navAnalysis');
+    if(b){ b.style.background='var(--green2)'; b.style.color='var(--green)'; }
   } else if(view==='comparator'){
-    cv.classList.add('active'); nc.style.cssText+=';'+activeStyle; renderComparator();
+    if(cv) cv.classList.add('active');
+    const b=document.getElementById('navComparator');
+    if(b){ b.style.background='var(--green2)'; b.style.color='var(--green)'; }
+    renderComparator();
   } else {
-    bv.classList.add('active'); nb.style.cssText+=';'+activeStyle; renderBalTree();
+    if(bv) bv.classList.add('active');
+    const b=document.getElementById('navBalances');
+    if(b){ b.style.background='var(--green2)'; b.style.color='var(--green)'; }
+    renderBalTree();
   }
 }
 
@@ -3235,7 +3284,6 @@ function resetBalForm() {
   uFormData={}; uFormMeta={}; uEditKey=null;
   document.getElementById('uploadForm').style.display='block';
   renderManualForm();
-}
 
 // ── Tab switcher ───────────────────────────────────────────────────────────────
 function switchBalTab(tab, el) {
@@ -3253,6 +3301,15 @@ function switchBalTab(tab, el) {
     document.getElementById('uploadForm').style.display='none';
   }
 }
+ormData={}; uFormMeta={}; uEditKey=null;
+  document.getElementById('uploadForm').style.display='block';
+  renderManualForm();
+}
+
+// ── Tab switcher ───────────────────────────────────────────────────────────────
+
+
+
 </script>
 </body>
 </html>
