@@ -2912,7 +2912,7 @@ function renderStepVerify(cont) {
       <input id="mEmpresaNew" placeholder="Ej: Pluspetrol S.A." style="padding:5px 9px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px;outline:none;width:220px">
     </div>
     <div class="frow"><span class="flabel">Año fiscal</span>
-      <select class="fselect" id="mAnio">${[2024,2023,2022,2021,2020,2019].map(y=>`<option ${y==uMeta.year_detected?'selected':''}>${y}</option>`).join('')}</select>
+      <select class="fselect" id="mAnio">${Array.from({length:7},(_,i)=>new Date().getFullYear()-i).map(y=>`<option ${y==uMeta.year_detected?'selected':''}>${y}</option>`).join('')}</select>
     </div>
     <div class="frow"><span class="flabel">Período</span>
       <select class="fselect" id="mTrimestre">
