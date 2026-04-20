@@ -413,7 +413,7 @@ body.dark {
 
 /* ── BALANCES VIEW ── */
 .bal-view{padding:1.5rem;max-width:1200px;margin:0 auto;display:none}
-.bal-view.active{display:block}
+.bal-view{display:none}.bal-view.active{display:block}
 .bal-two-col{display:grid;grid-template-columns:300px 1fr;gap:1.25rem;align-items:start}
 .bal-tree-wrap{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:1rem;position:sticky;top:60px}
 .bal-search{width:100%;padding:7px 12px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:.75rem}
@@ -514,8 +514,7 @@ body.dark {
       <span class="cache-dot" id="cacheDot"></span>
       <span id="cacheCount">Sin caché</span>
     </div>
-    <button class="theme-btn" id="langBtn" onclick="toggleLang()">🌐 EN</button>
-    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()">☾ Dark</button>
+  <button class="theme-btn" id="themeBtn" onclick="toggleTheme()">☾ Dark</button>
   </div>
 </div>
 
@@ -532,7 +531,7 @@ body.dark {
   </div>
   <div class="status-right">
     <span id="fxStatus"></span>
-    <span>Alpha Vantage · BCRA</span>
+    
   </div>
 </div>
 <!-- BALANCES VIEW -->
@@ -571,15 +570,15 @@ body.dark {
 <div class="main">
   <div class="placeholder" id="placeholder">
     <div class="ph-logo">📊</div>
-    <div class="ph-title">Motor de análisis financiero</div>
-    <div class="ph-sub">Empresas argentinas listadas en NYSE/NASDAQ y BYMA · Datos reales via Alpha Vantage · Conversión ARS→USD automática</div>
+    <div class="ph-title">Análisis Financiero</div>
+    
     <div class="quick-btns" id="quickBtns"></div>
   </div>
   <div class="loading" id="loading">
     <div class="spinner"></div>
     <div class="loading-text" id="loadingText">Obteniendo datos...</div>
   </div>
-  <div class="result" id="result">
+  <div class="result" id="result" style="display:none">
     <div class="company-header">
       <div class="company-left">
         <div class="company-name" id="rName"></div>
@@ -651,8 +650,9 @@ body.dark {
 </div>
 
 <script>
-
-
+// ── CONFIG ────────────────────────────
+// ── CONFIG ────────────────────────────────────────────────────────────────
+// ── CONFIG ────────────────────────────
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 const API_KEY = 'N4BV0YYXANY0HGDR';
 const AV = 'https://www.alphavantage.co/query';
@@ -699,35 +699,128 @@ let chartInstances = {};
 // ── COMPARADOR STATE ─────────────────────────────────────────────────────────
 let isDarkMode = false;
 let currentLang = 'es'; // 'es' | 'en'
-let compSlots = [null, null, null];
-let compIncludeSector = true;
-let compSelectedSector = null;
-let compActiveMetrics = new Set(['ebitda']);
+let compSlots       = [null, null, null];
+let compActiveMetric = 'ebitda';      // single active metric for chart
+let compRangeFrom   = '';             // 'YYYY||QN'
+let compRangeTo     = '';             // 'YYYY||QN'
+let compTablePeriod = '';             // 'YYYY||QN' for table snapshot
 
 const COMP_COLORS = ['#009e73','#1a6fd4','#b87a00'];
 const COMP_COLORS_BG = ['rgba(0,158,115,0.18)','rgba(26,111,212,0.18)','rgba(184,122,0,0.18)'];
 
+const GICS_BENCHMARKS = {
+  'Energy':                 { ebitda_m:0.26, net_margin:0.09, pe:11,  ev_ebitda:5.8,  pbv:1.9, roe:0.17, nd_ebitda:1.5  },
+  'Materials':              { ebitda_m:0.22, net_margin:0.08, pe:15,  ev_ebitda:8.0,  pbv:2.2, roe:0.14, nd_ebitda:1.8  },
+  'Industrials':            { ebitda_m:0.18, net_margin:0.08, pe:20,  ev_ebitda:12.0, pbv:3.5, roe:0.18, nd_ebitda:1.5  },
+  'Consumer Discretionary': { ebitda_m:0.14, net_margin:0.06, pe:22,  ev_ebitda:11.0, pbv:4.0, roe:0.20, nd_ebitda:1.8  },
+  'Consumer Staples':       { ebitda_m:0.16, net_margin:0.07, pe:20,  ev_ebitda:12.5, pbv:5.0, roe:0.28, nd_ebitda:2.0  },
+  'Health Care':            { ebitda_m:0.22, net_margin:0.12, pe:22,  ev_ebitda:13.0, pbv:4.5, roe:0.20, nd_ebitda:1.0  },
+  'Financials':             { ebitda_m:0.45, net_margin:0.22, pe:12,  ev_ebitda:null, pbv:1.5, roe:0.13, nd_ebitda:null },
+  'Information Technology': { ebitda_m:0.27, net_margin:0.18, pe:28,  ev_ebitda:18.0, pbv:8.0, roe:0.35, nd_ebitda:-0.5 },
+  'Communication Services': { ebitda_m:0.28, net_margin:0.12, pe:18,  ev_ebitda:9.0,  pbv:2.8, roe:0.14, nd_ebitda:1.8  },
+  'Utilities':              { ebitda_m:0.38, net_margin:0.12, pe:16,  ev_ebitda:10.0, pbv:1.8, roe:0.10, nd_ebitda:4.5  },
+  'Real Estate':            { ebitda_m:0.55, net_margin:0.18, pe:35,  ev_ebitda:18.0, pbv:1.5, roe:0.06, nd_ebitda:6.0  },
+};
+
+function getGICS(sector) {
+  return SECTOR_TO_GICS[sector] || 'Energy';
+}
+
+initTheme();
+initLang();
+
+// ── THEME TOGGLE ─────────────────────────────────────────────────────────────
+function toggleTheme() {
+  isDarkMode = !isDarkMode;
+  document.body.classList.toggle('dark', isDarkMode);
+  document.body.classList.toggle('light', !isDarkMode);
+  const btn = document.getElementById('themeBtn');
+  if (btn) btn.textContent = isDarkMode ? '☀ Light' : '☾ Dark';
+  localStorage.setItem('arg_theme', isDarkMode ? 'dark' : 'light');
+  Object.values(chartInstances).forEach(ch => ch.destroy());
+  chartInstances = {};
+  if (currentCompany) renderAll(currentCompany);
+}
+function initTheme() {
+  const savedTheme = localStorage.getItem('arg_theme');
+  if (savedTheme === 'dark') {
+    isDarkMode = true;
+    document.body.classList.add('dark');
+    document.body.classList.remove('light');
+    const btn = document.getElementById('themeBtn');
+    if (btn) btn.textContent = '☀ Light';
+  } else {
+    isDarkMode = false;
+    document.body.classList.add('light');
+    const btn = document.getElementById('themeBtn');
+    if (btn) btn.textContent = '☾ Dark';
+  }
+}
+// isDarkMode declared earlier
+
+// ── VIEW SWITCHER ─────────────────────────────────────────────────────────────
+function switchView(view) {
+  const av = document.getElementById('analysisView');
+  const cv = document.getElementById('comparatorView');
+  const bv = document.getElementById('balancesView');
+  if(av) av.style.display='none';
+  if(cv) cv.classList.remove('active');
+  if(bv) bv.classList.remove('active');
+  ['navAnalysis','navComparator','navBalances'].forEach(id => {
+    const b=document.getElementById(id);
+    if(b){b.style.background='transparent';b.style.color='var(--text3)';}
+  });
+  if(view==='analysis') {
+    if(av) av.style.display='';
+    const b=document.getElementById('navAnalysis');
+    if(b){b.style.background='var(--green2)';b.style.color='var(--green)';}
+  } else if(view==='comparator') {
+    if(cv) cv.classList.add('active');
+    const b=document.getElementById('navComparator');
+    if(b){b.style.background='var(--green2)';b.style.color='var(--green)';}
+    renderComparator();
+  } else if(view==='balances') {
+    if(bv) bv.classList.add('active');
+    const b=document.getElementById('navBalances');
+    if(b){b.style.background='var(--green2)';b.style.color='var(--green)';}
+    renderBalTree();
+  }
+}
+
+
+// GICS benchmarks defined above
+
 const ALL_METRICS = [
-  {key:'revenue',    es:'Revenue (USD M)',       en:'Revenue (USD M)',       hi:true },
-  {key:'ebitda',     es:'EBITDA (USD M)',         en:'EBITDA (USD M)',         hi:true },
-  {key:'net_income', es:'Net Income (USD M)',     en:'Net Income (USD M)',     hi:true },
-  {key:'net_debt',   es:'Deuda Neta (USD M)',     en:'Net Debt (USD M)',       hi:false},
-  {key:'ebitda_m',   es:'EBITDA Margin (%)',      en:'EBITDA Margin (%)',      hi:true },
-  {key:'net_margin', es:'Margen Neto (%)',        en:'Net Margin (%)',         hi:true },
-  {key:'pe',         es:'P/E Ratio',              en:'P/E Ratio',              hi:false},
-  {key:'ev_ebitda',  es:'EV/EBITDA',              en:'EV/EBITDA',              hi:false},
-  {key:'pbv',        es:'P/VL (P/Book)',          en:'P/BV (P/Book)',          hi:false},
-  {key:'roe',        es:'ROE (%)',                en:'ROE (%)',                hi:true },
-  {key:'nd_ebitda',  es:'Deuda Neta/EBITDA',     en:'Net Debt/EBITDA',       hi:false},
-  {key:'capex',      es:'Capex (USD M)',          en:'Capex (USD M)',          hi:false},
-  {key:'fcf',        es:'Free Cash Flow (USD M)', en:'Free Cash Flow (USD M)',hi:true },
-  {key:'mkt_cap',    es:'Market Cap (USD M)',     en:'Market Cap (USD M)',    hi:true },
+  { key:'revenue',    labelEs:'Revenue (USD M)',        labelEn:'Revenue (USD M)',        higherBetter:true  },
+  { key:'ebitda',     labelEs:'EBITDA (USD M)',          labelEn:'EBITDA (USD M)',          higherBetter:true  },
+  { key:'net_income', labelEs:'Net Income (USD M)',      labelEn:'Net Income (USD M)',      higherBetter:true  },
+  { key:'net_debt',   labelEs:'Deuda Neta (USD M)',      labelEn:'Net Debt (USD M)',        higherBetter:false },
+  { key:'ebitda_m',   labelEs:'EBITDA Margin (%)',       labelEn:'EBITDA Margin (%)',       higherBetter:true  },
+  { key:'net_margin', labelEs:'Margen Neto (%)',         labelEn:'Net Margin (%)',          higherBetter:true  },
+  { key:'pe',         labelEs:'P/E Ratio',               labelEn:'P/E Ratio',               higherBetter:false },
+  { key:'ev_ebitda',  labelEs:'EV/EBITDA',               labelEn:'EV/EBITDA',               higherBetter:false },
+  { key:'pbv',        labelEs:'P/VL (Price/Book)',       labelEn:'P/BV (Price/Book)',       higherBetter:false },
+  { key:'roe',        labelEs:'ROE (%)',                  labelEn:'ROE (%)',                  higherBetter:true  },
+  { key:'nd_ebitda',  labelEs:'Deuda Neta/EBITDA',      labelEn:'Net Debt/EBITDA',         higherBetter:false },
+  { key:'capex',      labelEs:'Capex (USD M)',            labelEn:'Capex (USD M)',            higherBetter:false },
+  { key:'fcf',        labelEs:'Free Cash Flow (USD M)',  labelEn:'Free Cash Flow (USD M)',  higherBetter:true  },
+  { key:'gross_debt', labelEs:'Deuda Bruta (USD M)',     labelEn:'Gross Debt (USD M)',      higherBetter:false },
+  { key:'mkt_cap',    labelEs:'Market Cap (USD M)',      labelEn:'Market Cap (USD M)',      higherBetter:true  },
 ];
 
-// Helper: metric label in current language (Spanish default)
-function mLabel(m) { return m.es || m.labelEs || m.label || m.key; }
+// Helper: get label in current language
+function mLabel(m) { return currentLang === 'en' ? m.labelEn : m.labelEs; }
 
-// ── CACHE (localStorage) ─────────────────────────────────────────────────────
+// Default: EBITDA selected (all optional, user can toggle all)
+let compActiveMetrics = new Set(['ebitda']);
+
+let compIncludeSector  = false;
+let compSelectedSector = null;
+
+
+
+// Helper: metric label in current language (Spanish default)
+
 function cacheGet(ticker) {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
@@ -809,6 +902,728 @@ async function avFetch(fn, params) {
   if (data.Note || data['Information'])
     throw new Error('Límite de API alcanzado (25/día). Esperá unos minutos.');
   return data;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BALANCES MODULE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const BAL_PIN      = '1234';
+const BAL_STORE    = 'arg_balances_v2';
+const IPC_STORE    = 'arg_ipc_v1';
+
+// ── Field definitions ─────────────────────────────────────────────────────────
+const BAL_FIELDS = {
+  eerr: [
+    {key:'revenue',      lbl:'Revenues / Ingresos totales',          calc:false},
+    {key:'costs',        lbl:'Costs / Costo de ventas',              calc:false},
+    {key:'gross_profit', lbl:'Gross Profit / Resultado bruto',       calc:'revenue+costs'},
+    {key:'da',           lbl:'D&A / Depreciación y amortización',    calc:false},
+    {key:'ebit',         lbl:'Operating Income / EBIT',              calc:false},
+    {key:'ebitda_calc',  lbl:'EBITDA (calculado: EBIT + D&A)',       calc:'ebit+da', display:true},
+    {key:'ebitda_rep',   lbl:'EBITDA Reportado (si lo reportan)',    calc:false, optional:true},
+    {key:'adj_ebitda',   lbl:'Adjusted EBITDA (si lo reportan)',     calc:false, optional:true},
+    {key:'fin_income',   lbl:'Financial Income / Ingreso financiero',calc:false},
+    {key:'fin_cost',     lbl:'Financial Cost / Egreso financiero',   calc:false},
+    {key:'fin_net',      lbl:'Net Financial Results (calculado)',    calc:'fin_income+fin_cost', display:true},
+    {key:'tax',          lbl:'Income Tax / Impuesto a las ganancias',calc:false},
+    {key:'net_income',   lbl:'Net Income / Resultado del ejercicio', calc:false},
+  ],
+  balance: [
+    {key:'cash',               lbl:'Cash & equivalents / Caja',               calc:false},
+    {key:'current_assets',     lbl:'Total Current Assets / Activo corriente',  calc:false},
+    {key:'non_current_assets', lbl:'Total Non-current Assets / Activo no corriente', calc:false},
+    {key:'total_assets',       lbl:'Total Assets / Activo total',             calc:'current_assets+non_current_assets'},
+    {key:'debt_st',            lbl:'Short-term debt / Deuda financiera CP',   calc:false},
+    {key:'current_liab',       lbl:'Total Current Liabilities / Pasivo corriente', calc:false},
+    {key:'debt_lt',            lbl:'Long-term debt / Deuda financiera LP',    calc:false},
+    {key:'non_current_liab',   lbl:'Total Non-current Liabilities / Pasivo no corriente', calc:false},
+    {key:'total_liab',         lbl:'Total Liabilities / Total pasivo',        calc:'current_liab+non_current_liab'},
+    {key:'equity',             lbl:"Total Shareholders' Equity / Patrimonio neto", calc:false},
+    {key:'net_debt',           lbl:'Net Debt / Deuda neta (calculado)',       calc:'debt_st+debt_lt-cash', display:true},
+  ],
+  flujo: [
+    {key:'cfo',              lbl:'Net cash flow from operating activities / FCO', calc:false},
+    {key:'capex',            lbl:'Acquisitions of PP&E / Capex',                  calc:false},
+    {key:'fcf',              lbl:'Free Cash Flow / FCF (calculado)',               calc:'cfo+capex', display:true},
+    {key:'fcf_rep',          lbl:'FCF Reportado (si lo reportan)',                calc:false, optional:true},
+    {key:'cff',              lbl:'Net cash flow from financing activities',        calc:false},
+    {key:'interest_paid',    lbl:'Interest paid / Intereses pagados',             calc:false},
+    {key:'interest_received',lbl:'Interest received / Intereses cobrados',        calc:false},
+    {key:'debt_proceeds',    lbl:'Debt proceeds / Toma de préstamos',             calc:false},
+    {key:'debt_repay',       lbl:'Debt repayments / Pago de préstamos',           calc:false},
+    {key:'dividends',        lbl:'Dividends paid / Dividendos pagados',           calc:false, optional:true},
+  ],
+  deuda: [
+    {key:'debt_st',     lbl:'Short-term debt / Deuda CP',    calc:false},
+    {key:'debt_lt',     lbl:'Long-term debt / Deuda LP',     calc:false},
+    {key:'total_debt',  lbl:'Total debt / Deuda total',      calc:'debt_st+debt_lt'},
+    {key:'net_debt_d',  lbl:'Net debt reportado (opcional)', calc:false, optional:true},
+  ],
+};
+
+// Fields that are STOCKS (balance sheet) — Q4 = Annual value
+const STOCK_FIELDS = new Set([
+  'cash','current_assets','non_current_assets','total_assets',
+  'debt_st','current_liab','debt_lt','non_current_liab','total_liab',
+  'equity','net_debt','debt_st','debt_lt','total_debt','net_debt_d'
+]);
+
+// ── Storage helpers ────────────────────────────────────────────────────────────
+function balGetAll()  { try{ return JSON.parse(localStorage.getItem(BAL_STORE)||'{}'); }catch{ return {}; } }
+function balSave(db)  { localStorage.setItem(BAL_STORE, JSON.stringify(db)); }
+function ipcGetAll()  { try{ return JSON.parse(localStorage.getItem(IPC_STORE)||'{}'); }catch{ return {}; } }
+function ipcSave(db)  { localStorage.setItem(IPC_STORE, JSON.stringify(db)); }
+function balKey(co, year, q) { return `${co}||${year}||${q}`; }
+
+// ── IPC helpers ────────────────────────────────────────────────────────────────
+// IPC stored as { '2024-01': 286.4, '2024-02': 296.1, ... }
+function ipcGet(yearMonth) { return ipcGetAll()[yearMonth] || null; }
+
+// Get IPC for last month of a quarter
+function ipcForQ(year, q) {
+  const lastMonth = {Q1:'03', Q2:'06', Q3:'09', Q4:'12'}[q];
+  return ipcGet(`${year}-${lastMonth}`);
+}
+
+// Adjustment factor: value in period A → value in period B
+// factor = IPC_B / IPC_A  → multiply value_A by factor to express in period B prices
+function ipcFactor(yearA, qA, yearB, qB) {
+  const a = ipcForQ(yearA, qA);
+  const b = ipcForQ(yearB, qB);
+  if (!a || !b) return null;
+  return b / a;
+}
+
+// ── Calculate derived fields ───────────────────────────────────────────────────
+function calcDerived(data) {
+  const get = k => (data[k] !== undefined && data[k] !== null && data[k] !== '') ? parseFloat(data[k]) : null;
+  const derived = {...data};
+  // EERR
+  if (get('revenue') !== null && get('costs') !== null && get('gross_profit') === null)
+    derived.gross_profit = get('revenue') + get('costs');
+  if (get('ebit') !== null && get('da') !== null)
+    derived.ebitda_calc = get('ebit') + Math.abs(get('da'));
+  if (get('fin_income') !== null && get('fin_cost') !== null)
+    derived.fin_net = get('fin_income') + get('fin_cost');
+  // Balance
+  if (get('current_assets') !== null && get('non_current_assets') !== null && get('total_assets') === null)
+    derived.total_assets = get('current_assets') + get('non_current_assets');
+  if (get('current_liab') !== null && get('non_current_liab') !== null && get('total_liab') === null)
+    derived.total_liab = get('current_liab') + get('non_current_liab');
+  if (get('debt_st') !== null && get('debt_lt') !== null && get('cash') !== null)
+    derived.net_debt = get('debt_st') + get('debt_lt') - get('cash');
+  // Flujo
+  if (get('cfo') !== null && get('capex') !== null && get('fcf') === null)
+    derived.fcf = get('cfo') + get('capex');
+  // Deuda
+  if (get('debt_st') !== null && get('debt_lt') !== null && get('total_debt') === null)
+    derived.total_debt = get('debt_st') + get('debt_lt');
+  return derived;
+}
+
+// ── Calculate Q4 from Annual - Q1adj - Q2adj - Q3adj ──────────────────────────
+function calcQ4(co, year) {
+  const db = balGetAll();
+  const annual = db[balKey(co, year, 'Q4')] || db[balKey(co, year, 'Anual')];
+  const q1 = db[balKey(co, year, 'Q1')];
+  const q2 = db[balKey(co, year, 'Q2')];
+  const q3 = db[balKey(co, year, 'Q3')];
+  if (!annual || !q1 || !q2 || !q3) return null;
+
+  const f1 = ipcFactor(year, 'Q1', year, 'Q4');
+  const f2 = ipcFactor(year, 'Q2', year, 'Q4');
+  const f3 = ipcFactor(year, 'Q3', year, 'Q4');
+  if (!f1 || !f2 || !f3) return null;
+
+  const result = {};
+  // Only calculate for flow fields (non-stock)
+  Object.keys(annual).forEach(k => {
+    if (k.startsWith('_')) { result[k] = annual[k]; return; }
+    if (STOCK_FIELDS.has(k)) {
+      result[k] = annual[k]; // Stock: Q4 = Annual
+    } else {
+      const a = parseFloat(annual[k]);
+      const v1 = parseFloat(q1[k] || 0) * f1;
+      const v2 = parseFloat(q2[k] || 0) * f2;
+      const v3 = parseFloat(q3[k] || 0) * f3;
+      if (!isNaN(a)) result[k] = a - v1 - v2 - v3;
+    }
+  });
+  return result;
+}
+
+// ── Tree renderer ─────────────────────────────────────────────────────────────
+function renderBalTree() {
+  const db = balGetAll();
+  const tree = document.getElementById('balTree');
+  if (!tree) return;
+  const companies = {};
+  Object.entries(db).forEach(([k,v]) => {
+    const [co,year,q] = k.split('||');
+    if (!companies[co]) companies[co] = {};
+    if (!companies[co][year]) companies[co][year] = [];
+    if (!companies[co][year].find(p=>p.q===q))
+      companies[co][year].push({q, key:k});
+  });
+  if (!Object.keys(companies).length) {
+    tree.innerHTML='<div class="bal-empty-tree">Todavía no hay balances cargados.<br>Usá "Cargar balance" para agregar el primero.</div>';
+    return;
+  }
+  const qOrder = {'Q1':1,'Q2':2,'Q3':3,'Q4':4,'Anual':5};
+  tree.innerHTML = Object.keys(companies).sort().map(co => `
+    <div class="tree-item">
+      <div class="tree-co" onclick="toggleTreeCo(this)">
+        <span class="tree-co-icon">▶</span>
+        <span>${co}</span>
+        <span style="margin-left:auto;font-size:10px;color:var(--text3)">${Object.keys(companies[co]).length} año${Object.keys(companies[co]).length>1?'s':''}</span>
+      </div>
+      <div class="tree-years">
+        ${Object.keys(companies[co]).sort().reverse().map(yr => {
+          const periods = companies[co][yr].sort((a,b)=>(qOrder[a.q]||9)-(qOrder[b.q]||9));
+          const hasAnual = periods.some(p=>p.q==='Q4'||p.q==='Anual');
+          return `<div class="tree-year" onclick="toggleTreeYear(this)">
+            <span class="tree-year-icon">▶</span>
+            <span>${yr}</span>
+            ${hasAnual?'<span class="period-badge anual" style="margin-left:auto">Anual</span>':''}
+          </div>
+          <div class="tree-periods">
+            ${periods.map(p=>`
+              <div class="tree-period" onclick="viewBalance('${p.key}')">
+                ${p.q==='Q4'?'Q4 / Anual':p.q}
+              </div>`).join('')}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function toggleTreeCo(el) { el.classList.toggle('open'); el.nextElementSibling.classList.toggle('open'); }
+function toggleTreeYear(el) { el.classList.toggle('open'); el.nextElementSibling.classList.toggle('open'); }
+function filterBalTree(q) {
+  document.querySelectorAll('.tree-item').forEach(item => {
+    const co = item.querySelector('.tree-co span:nth-child(2)')?.textContent||'';
+    item.style.display = co.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+// ── View a saved balance ───────────────────────────────────────────────────────
+function viewBalance(key) {
+  const db = balGetAll(); const entry = db[key]; if (!entry) return;
+  const [co,year,q] = key.split('||');
+  const data = calcDerived(entry);
+  const detail = document.getElementById('balDetail');
+  if (!detail) return;
+  detail.style.display = 'block';
+  const fmt = v => (v===null||v===undefined||isNaN(v)) ? '<span style="color:var(--text3)">N/D</span>'
+    : `<span style="font-family:'DM Mono',monospace">${Number(v).toLocaleString('es-AR',{maximumFractionDigits:1})}</span>`;
+  const secs = [
+    {title:'Estado de Resultados', fields:[
+      ['Revenue',data.revenue],['Gross Profit',data.gross_profit],
+      ['EBIT',data.ebit],['D&A',data.da],['EBITDA (calc.)',data.ebitda_calc],
+      ['EBITDA Reportado',data.ebitda_rep],['Adjusted EBITDA',data.adj_ebitda],
+      ['Ing. Financiero',data.fin_income],['Egr. Financiero',data.fin_cost],
+      ['Resultado Fin. Neto',data.fin_net],['Tax',data.tax],['Net Income',data.net_income],
+    ]},
+    {title:'Balance', fields:[
+      ['Caja',data.cash],['Activo Corriente',data.current_assets],
+      ['Activo No Corriente',data.non_current_assets],['Activo Total',data.total_assets],
+      ['Deuda CP',data.debt_st],['Pasivo Corriente',data.current_liab],
+      ['Deuda LP',data.debt_lt],['Pasivo No Corriente',data.non_current_liab],
+      ['Total Pasivo',data.total_liab],['Patrimonio Neto',data.equity],['Deuda Neta',data.net_debt],
+    ]},
+    {title:'Flujo de Efectivo', fields:[
+      ['FCO',data.cfo],['Capex',data.capex],['FCF (calc.)',data.fcf],
+      ['FCF Reportado',data.fcf_rep],['Financiamiento',data.cff],
+      ['Intereses Pagados',data.interest_paid],['Intereses Cobrados',data.interest_received],
+      ['Toma Préstamos',data.debt_proceeds],['Pago Préstamos',data.debt_repay],
+    ]},
+  ];
+  detail.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:16px;font-weight:600">${co}</div>
+        <div style="font-size:12px;color:var(--text3)">${year} · ${q==='Q4'?'Q4 / Anual':q} · ${entry._moneda||''} ${entry._unidad||''}</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="editBalance('${key}')" style="padding:5px 12px;font-size:11px;background:var(--blue2);border:0.5px solid var(--blue);border-radius:6px;color:var(--blue);cursor:pointer;font-family:'DM Sans',sans-serif">Editar</button>
+        <button onclick="deleteBalance('${key}')" style="padding:5px 12px;font-size:11px;background:var(--red2);border:0.5px solid rgba(214,51,51,0.3);border-radius:6px;color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif">Eliminar</button>
+      </div>
+    </div>
+    ${secs.map(sec=>`
+      <div style="margin-bottom:1.25rem">
+        <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:.5rem">${sec.title}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
+          ${sec.fields.filter(([,v])=>v!==undefined&&v!==null).map(([lbl,v])=>`
+            <div style="background:var(--bg3);border-radius:var(--radius);padding:.65rem .85rem">
+              <div style="font-size:10px;color:var(--text3);margin-bottom:3px">${lbl}</div>
+              <div style="font-size:14px;font-weight:500">${fmt(v)}</div>
+            </div>`).join('')}
+        </div>
+      </div>`).join('')}
+    <div style="font-size:11px;color:var(--text3);margin-top:.5rem">
+      Cargado: ${new Date(entry._ts||Date.now()).toLocaleDateString('es-AR')}
+      ${entry._moneda==='ARS'?` · ARS ${entry._unidad||''}`:' · USD millones'}
+    </div>`;
+  document.querySelectorAll('.tree-period').forEach(el=>el.classList.remove('selected'));
+  document.querySelectorAll('.tree-period').forEach(el=>{
+    if(el.getAttribute('onclick')?.includes(key)) el.classList.add('selected');
+  });
+}
+
+function deleteBalance(key) {
+  if(!confirm('¿Eliminar este balance?')) return;
+  const db=balGetAll(); delete db[key]; balSave(db);
+  renderBalTree();
+  const d=document.getElementById('balDetail'); if(d) d.style.display='none';
+}
+
+function editBalance(key) {
+  const db=balGetAll(); const entry=db[key]; if(!entry) return;
+  const [co,year,q]=key.split('||');
+  switchBalTab('cargar',document.getElementById('btabCargar'));
+  if(!pinUnlocked){ document.getElementById('pinGate').style.display='flex'; return; }
+  // Pre-fill the form with existing data
+  uFormData={...entry}; uEditKey=key;
+  uFormMeta={co, year, q, moneda:entry._moneda||'USD', unidad:entry._unidad||'Millones', cons:entry._cons||'Consolidado'};
+  document.getElementById('pinGate').style.display='none';
+  document.getElementById('uploadForm').style.display='block';
+  renderManualForm();
+}
+
+// ── PIN ────────────────────────────────────────────────────────────────────────
+let pinUnlocked=false, uFormData={}, uFormMeta={}, uEditKey=null;
+function checkPin(val) {
+  if(val.length<BAL_PIN.length) return;
+  if(val===BAL_PIN) {
+    pinUnlocked=true;
+    document.getElementById('pinGate').style.display='none';
+    document.getElementById('uploadForm').style.display='block';
+    uFormData={}; uFormMeta={}; uEditKey=null;
+    renderManualForm();
+  } else {
+    document.getElementById('pinError').style.display='block';
+    document.getElementById('pinInput').value='';
+    setTimeout(()=>document.getElementById('pinError').style.display='none',2000);
+  }
+}
+
+// ── IPC TABLE ─────────────────────────────────────────────────────────────────
+// Fetch IPC from datos.gob.ar and populate table
+const IPC_API = 'https://apis.datos.gob.ar/series/api/series/?ids=148.3_INIVELNAL_DICI_M_26&limit=100&format=json';
+
+async function fetchIPCFromAPI() {
+  try {
+    const res = await fetch(IPC_API);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const data = json.data || [];
+    const db = ipcGetAll();
+    let count = 0;
+    data.forEach(([dateStr, val]) => {
+      if (!dateStr || val === null) return;
+      // dateStr is "YYYY-MM-DD", store as "YYYY-MM"
+      const key = dateStr.slice(0,7);
+      if (!db[key]) { db[key] = parseFloat(val.toFixed(2)); count++; }
+    });
+    if (count > 0) {
+      ipcSave(db);
+      console.log(`IPC: ${count} nuevos valores cargados desde datos.gob.ar`);
+    }
+    return count;
+  } catch(e) {
+    console.warn('IPC fetch failed:', e.message);
+    return 0;
+  }
+}
+
+async function renderIPCTable() {
+  const cont = document.getElementById('balTabIPC');
+  if (!cont) return;
+
+  // Show loading state
+  cont.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text3);font-size:13px">Actualizando datos del INDEC...</div>';
+
+  // Try to fetch fresh data from API
+  const newCount = await fetchIPCFromAPI();
+
+  const ipc = ipcGetAll();
+  const currentYear = new Date().getFullYear();
+  const years = [currentYear, currentYear-1, currentYear-2, currentYear-3];
+  const months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+  const mNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+  const hasData = Object.keys(ipc).length > 0;
+
+  cont.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:13px;font-weight:500;color:var(--text)">Inflación mensual (IPC) — INDEC</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">
+          Fuente: <a href="https://datos.gob.ar" target="_blank" style="color:var(--blue)">datos.gob.ar</a>
+          · Nivel General · calculada mes a mes a partir del índice base Dic 2016
+          ${newCount > 0 ? `· <span style="color:var(--green)">${newCount} valores actualizados</span>` : ''}
+        </div>
+      </div>
+      <button onclick="forceRefreshIPC()" class="gb"
+        style="font-size:11px;padding:5px 12px">↻ Actualizar</button>
+    </div>
+    ${!hasData ? `
+      <div style="padding:1rem;background:var(--amber2);border-radius:var(--radius);font-size:12px;color:var(--amber);margin-bottom:1rem">
+        ⚠ No se pudieron obtener datos automáticamente. Podés ingresarlos manualmente o verificar tu conexión.
+      </div>` : ''}
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr>
+        <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:10px;width:50px">Año</th>
+        ${mNames.map(mn=>`<th style="padding:6px 6px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:10px;text-align:center">${mn}</th>`).join('')}
+        <th style="padding:6px 8px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:10px;text-align:right">Anual</th>
+      </tr></thead>
+      <tbody>
+        ${years.map(yr=>{
+          // Pre-compute inflation for each month of this year
+          const rowData = months.map(mo => {
+            const key  = `${yr}-${mo}`;
+            const prev = mo === '01'
+              ? ipc[`${yr-1}-12`]
+              : ipc[`${yr}-${String(parseInt(mo)-1).padStart(2,'0')}`];
+            const curr = ipc[key];
+            const infl = (curr && prev) ? ((curr/prev - 1)*100) : null;
+            return { key, curr, infl };
+          });
+          // Annual inflation: Dec vs Dec previous year
+          const decCurr = ipc[`${yr}-12`];
+          const decPrev = ipc[`${yr-1}-12`];
+          const annual  = (decCurr && decPrev) ? ((decCurr/decPrev - 1)*100) : null;
+
+          return `<tr>
+            <td style="padding:6px 10px;font-weight:500;color:var(--text);font-size:12px">${yr}</td>
+            ${rowData.map(({key, curr, infl}) => {
+              const hasInfl = infl !== null;
+              const color = infl === null ? 'var(--text3)' : infl >= 10 ? 'var(--red)' : infl >= 5 ? 'var(--amber)' : 'var(--green)';
+              return `<td style="padding:5px 4px;text-align:center">
+                ${hasInfl
+                  ? `<span title="Índice: ${curr}" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:${color}">${infl.toFixed(1)}%</span>`
+                  : `<span style="color:var(--text3);font-size:11px">${curr ? curr.toFixed(1) : '—'}</span>`
+                }
+              </td>`;
+            }).join('')}
+            <td style="padding:5px 8px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:${annual ? (annual>=100?'var(--red)':'var(--amber)') : 'var(--text3)'}">
+              ${annual ? annual.toFixed(1)+'%' : '—'}
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>
+    <div style="margin-top:.75rem;font-size:11px;color:var(--text3)">
+      Inflación mensual calculada vs. mes anterior. Anual = Dic vs. Dic año anterior. Rojo ≥10% · Ámbar ≥5% · Verde <5%. Pasá el cursor sobre un valor para ver el índice.
+    </div>`;
+}
+
+async function forceRefreshIPC() {
+  // Clear cached data and re-fetch
+  const db = ipcGetAll();
+  // Don't clear manually entered data — only refresh from API
+  const newCount = await fetchIPCFromAPI();
+  renderIPCTable();
+}
+
+
+function saveIPC(key, val) {
+  const db = ipcGetAll();
+  const n = parseFloat(val);
+  if(!isNaN(n) && n>0) { db[key]=n; ipcSave(db); }
+  else if(val===''||val==='0') { delete db[key]; ipcSave(db); }
+}
+
+// ── MANUAL FORM ───────────────────────────────────────────────────────────────
+function renderManualForm() {
+  const cont = document.getElementById('uploadForm');
+  if(!cont) return;
+
+  const companies_list = [...new Set([
+    ...COMPANIES.map(c=>c.name),
+    'YPF S.A.','Vista Energy','Pampa Energía','TGS','Edenor',
+    'Pluspetrol','Tecpetrol','PAE','MSU Energy','CGC',
+    'Albanesi','Genneia','Clisa','Telecom Argentina',
+  ])];
+
+  const meta = uFormMeta;
+  const data = uFormData;
+
+  cont.innerHTML = `
+    <div style="margin-bottom:1.25rem">
+      <div style="font-size:13px;font-weight:500;margin-bottom:.75rem;color:var(--text)">
+        ${uEditKey ? '✏ Editar balance' : '+ Cargar nuevo balance'}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:1rem">
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Empresa</div>
+          <select id="fmEmpresa" class="fselect" style="width:100%" onchange="handleCoChange(this)">
+            ${companies_list.map(n=>`<option ${meta.co===n?'selected':''}>${n}</option>`).join('')}
+            <option value="__new__" ${!meta.co?'selected':''}>+ Nueva empresa...</option>
+          </select>
+        </div>
+        <div id="fmNewCoWrap" style="display:${!meta.co||meta.co==='__new__'?'block':'none'}">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Nombre empresa</div>
+          <input id="fmNewCo" placeholder="Ej: Pluspetrol S.A."
+            style="width:100%;padding:6px 10px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:12px;outline:none"
+            value="${meta.newCo||''}">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Año fiscal</div>
+          <select id="fmAnio" class="fselect" style="width:100%">
+            ${Array.from({length:8},(_,i)=>new Date().getFullYear()-i).map(y=>`<option ${meta.year==y?'selected':''}>${y}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Período</div>
+          <select id="fmPeriodo" class="fselect" style="width:100%">
+            ${['Q1','Q2','Q3','Q4','Anual'].map(q=>`<option ${meta.q===q?'selected':''}>${q}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Moneda</div>
+          <select id="fmMoneda" class="fselect" style="width:100%">
+            <option ${meta.moneda==='USD'?'selected':''}>USD</option>
+            <option ${meta.moneda==='ARS'?'selected':''}>ARS</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Unidad</div>
+          <select id="fmUnidad" class="fselect" style="width:100%">
+            <option ${meta.unidad==='Millones'?'selected':''}>Millones</option>
+            <option ${meta.unidad==='Miles'?'selected':''}>Miles</option>
+            <option ${meta.unidad==='Unidades'?'selected':''}>Unidades</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Tipo</div>
+          <select id="fmCons" class="fselect" style="width:100%">
+            <option ${meta.cons==='Consolidado'?'selected':''}>Consolidado</option>
+            <option ${meta.cons==='Individual'?'selected':''}>Individual</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="fmQ4Warning" style="display:none;padding:8px 12px;background:var(--amber2);border-radius:6px;font-size:12px;color:var(--amber);margin-bottom:.75rem">
+        ⚠ Para Q4 los campos de flujo se calculan automáticamente si están cargados Q1, Q2 y Q3 con el IPC correspondiente.
+        Si no están cargados, podés ingresar los valores manualmente igual.
+      </div>
+    </div>
+
+    <div class="mtabs" id="fmTabs">
+      ${['eerr','balance','flujo','deuda'].map((s,i)=>
+        `<div class="mtab ${i===0?'active':''}" onclick="switchFmTab('${s}',this)">${
+          {eerr:'Estado de Resultados',balance:'Balance',flujo:'Flujo de Efectivo',deuda:'Deuda'}[s]
+        }</div>`).join('')}
+    </div>
+
+    <div id="fmFields" style="max-height:380px;overflow-y:auto;margin-bottom:1rem"></div>
+
+    <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap">
+      <button class="gb" onclick="resetBalForm()">Cancelar</button>
+      <div style="display:flex;gap:8px">
+        <button class="gb" onclick="switchFmTabByIdx(-1)">← Anterior</button>
+        <button class="gb" onclick="switchFmTabByIdx(1)">Siguiente →</button>
+        <button class="gb gb-primary" onclick="saveManualBalance()">Guardar balance ✓</button>
+      </div>
+    </div>`;
+
+  fmCurrentSection = 'eerr';
+  renderFmFields('eerr');
+  updateQ4Warning();
+}
+
+let fmCurrentSection = 'eerr';
+const fmSections = ['eerr','balance','flujo','deuda'];
+
+function handleCoChange(el) {
+  document.getElementById('fmNewCoWrap').style.display = el.value==='__new__'?'block':'none';
+}
+
+function updateQ4Warning() {
+  const periodo = document.getElementById('fmPeriodo')?.value;
+  const w = document.getElementById('fmQ4Warning');
+  if(w) w.style.display = (periodo==='Q4'||periodo==='Anual') ? 'none' : 'none';
+}
+
+function switchFmTab(sec, el) {
+  fmCurrentSection = sec;
+  document.querySelectorAll('#fmTabs .mtab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  renderFmFields(sec);
+}
+
+function switchFmTabByIdx(dir) {
+  const idx = fmSections.indexOf(fmCurrentSection);
+  const next = fmSections[Math.max(0, Math.min(fmSections.length-1, idx+dir))];
+  const tabs = document.querySelectorAll('#fmTabs .mtab');
+  fmCurrentSection = next;
+  tabs.forEach((t,i) => t.classList.toggle('active', fmSections[i]===next));
+  renderFmFields(next);
+}
+
+function renderFmFields(sec) {
+  const fields = BAL_FIELDS[sec];
+  const data   = uFormData;
+  const cont   = document.getElementById('fmFields');
+  if(!cont) return;
+
+  cont.innerHTML = fields.map(f => {
+    const isCalc    = f.calc && f.display;  // auto-calculated, just shown
+    const isOptional= f.optional;
+    const val = data[f.key] !== undefined ? data[f.key] : '';
+    const calcVal = isCalc ? computeCalcField(f, data) : null;
+
+    if(isCalc) {
+      return `<div class="frow" style="background:var(--bg3);border-radius:5px;padding:6px 10px">
+        <span class="flabel" style="color:var(--text3)">${f.lbl}</span>
+        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--green)" id="calc_${f.key}">
+          ${calcVal !== null ? Number(calcVal).toLocaleString('es-AR',{maximumFractionDigits:1}) : 'Completá los campos necesarios'}
+        </span>
+      </div>`;
+    }
+
+    return `<div class="frow">
+      <span class="flabel">${f.lbl}${isOptional?' <span style="font-size:10px;color:var(--text3)">(opcional)</span>':''}</span>
+      <input type="number" step="any" id="fi_${f.key}" value="${val}" placeholder="N/D"
+        style="width:160px;padding:5px 9px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:5px;
+               color:var(--text);font-family:'DM Mono',monospace;font-size:12px;text-align:right;outline:none"
+        oninput="updateFormField('${f.key}',this.value)"
+        onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border2)'">
+    </div>`;
+  }).join('');
+}
+
+function computeCalcField(f, data) {
+  // Simple expression evaluator for calc fields
+  const get = k => {
+    const v = data[k];
+    return (v!==undefined && v!==null && v!=='') ? parseFloat(v) : null;
+  };
+  if(f.key==='ebitda_calc') {
+    const ebit=get('ebit'), da=get('da');
+    return (ebit!==null&&da!==null) ? ebit+Math.abs(da) : null;
+  }
+  if(f.key==='fin_net') {
+    const i=get('fin_income'), c=get('fin_cost');
+    return (i!==null&&c!==null) ? i+c : null;
+  }
+  if(f.key==='gross_profit') {
+    const r=get('revenue'), c=get('costs');
+    return (r!==null&&c!==null) ? r+c : null;
+  }
+  if(f.key==='fcf') {
+    const o=get('cfo'), x=get('capex');
+    return (o!==null&&x!==null) ? o+x : null;
+  }
+  if(f.key==='net_debt') {
+    const s=get('debt_st'), l=get('debt_lt'), c=get('cash');
+    return (s!==null&&l!==null&&c!==null) ? s+l-c : null;
+  }
+  if(f.key==='total_assets') {
+    const ca=get('current_assets'), nca=get('non_current_assets');
+    return (ca!==null&&nca!==null) ? ca+nca : null;
+  }
+  if(f.key==='total_liab') {
+    const cl=get('current_liab'), ncl=get('non_current_liab');
+    return (cl!==null&&ncl!==null) ? cl+ncl : null;
+  }
+  if(f.key==='total_debt') {
+    const s=get('debt_st'), l=get('debt_lt');
+    return (s!==null&&l!==null) ? s+l : null;
+  }
+  return null;
+}
+
+function updateFormField(key, val) {
+  uFormData[key] = (val===''||val===null) ? null : parseFloat(val);
+  // Update all visible calc fields
+  const sec = fmCurrentSection;
+  BAL_FIELDS[sec]?.forEach(f => {
+    if(f.calc && f.display) {
+      const el = document.getElementById('calc_'+f.key);
+      if(el) {
+        const v = computeCalcField(f, uFormData);
+        el.textContent = v!==null ? Number(v).toLocaleString('es-AR',{maximumFractionDigits:1}) : 'Completá los campos necesarios';
+      }
+    }
+  });
+}
+
+function saveManualBalance() {
+  const coEl   = document.getElementById('fmEmpresa');
+  const co     = coEl?.value==='__new__'
+    ? (document.getElementById('fmNewCo')?.value||'Nueva empresa').trim()
+    : coEl?.value;
+  const year   = document.getElementById('fmAnio')?.value;
+  const q      = document.getElementById('fmPeriodo')?.value;
+  const moneda = document.getElementById('fmMoneda')?.value;
+  const unidad = document.getElementById('fmUnidad')?.value;
+  const cons   = document.getElementById('fmCons')?.value;
+
+  if(!co || !year || !q) { alert('Completá empresa, año y período'); return; }
+
+  const key = balKey(co, year, q);
+  const db  = balGetAll();
+  if(db[key] && !uEditKey && !confirm(`Ya existe un balance para ${co} ${year} ${q}. ¿Reemplazar?`)) return;
+
+  // Merge calculated fields
+  const finalData = calcDerived({...uFormData, _moneda:moneda, _unidad:unidad, _cons:cons, _ts:Date.now()});
+  db[key] = finalData;
+  balSave(db);
+
+  // If saving Annual/Q4, also sync stock fields to Q4
+  if(q==='Anual') {
+    const q4key = balKey(co, year, 'Q4');
+    if(!db[q4key]) {
+      const q4data = {...finalData};
+      // Stock fields: Q4 = Annual value (already equal)
+      db[q4key] = {...q4data, _ts:Date.now()};
+      balSave(db);
+    }
+  }
+
+  renderBalTree();
+  renderQuickBtns();
+  document.getElementById('uploadForm').innerHTML=`
+    <div style="text-align:center;padding:2.5rem;color:var(--green)">
+      <div style="font-size:32px;margin-bottom:10px;opacity:0.6">✓</div>
+      <div style="font-size:14px;font-weight:500;margin-bottom:6px">Balance guardado</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:1.5rem">${co} · ${year} · ${q}</div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button class="gb gb-primary" onclick="resetBalForm()">Cargar otro →</button>
+        <button class="gb" onclick="switchBalTab('ver',document.getElementById('btabVer'))">Ver balances</button>
+      </div>
+    </div>`;
+  uEditKey = null;
+}
+
+function resetBalForm() {
+  uFormData={}; uFormMeta={}; uEditKey=null;
+  document.getElementById('uploadForm').style.display='block';
+  renderManualForm();
+}
+
+// ── Tab switcher ───────────────────────────────────────────────────────────────
+function switchBalTab(tab, el) {
+  document.querySelectorAll('.bal-tab').forEach(t=>t.classList.remove('active'));
+  if(el) el.classList.add('active');
+  ['balTabVer','balTabCargar','balTabIPC'].forEach(id=>{
+    const e=document.getElementById(id); if(e) e.style.display='none';
+  });
+  const target = {ver:'balTabVer', cargar:'balTabCargar', ipc:'balTabIPC'}[tab];
+  const targetEl = document.getElementById(target);
+  if(targetEl) targetEl.style.display='';
+  if(tab==='ipc') renderIPCTable();
+  if(tab==='cargar' && !pinUnlocked) {
+    document.getElementById('pinGate').style.display='flex';
+    document.getElementById('uploadForm').style.display='none';
+  }
 }
 
 async function fetchAllData(company) {
@@ -1054,10 +1869,26 @@ function resetSearch() {
   document.getElementById('loading').style.display = 'none';
   document.getElementById('placeholder').style.display = '';
   document.getElementById('searchInput').value = '';
+  // Clear status bar
+  setStatus('');
+  const dot = document.getElementById('statusDot');
+  if (dot) dot.className = 'status-dot';
+  // Clear company header
+  const rName = document.getElementById('rName');
+  const rTags = document.getElementById('rTags');
+  const rPrice = document.getElementById('rPrice');
+  const rChange = document.getElementById('rChange');
+  const rPriceMeta = document.getElementById('rPriceMeta');
+  if (rName) rName.textContent = '';
+  if (rTags) rTags.innerHTML = '';
+  if (rPrice) rPrice.textContent = '';
+  if (rChange) rChange.textContent = '';
+  if (rPriceMeta) rPriceMeta.textContent = '';
   const ySel = document.getElementById('yearSelect');
   if (ySel) ySel.innerHTML = '<option value="">— Año —</option>';
   const qSel = document.getElementById('quarterSelect');
   if (qSel) qSel.value = 'annual';
+  renderQuickBtns();
 }
 
 function setCurrency(c, el) {
@@ -1141,6 +1972,17 @@ document.addEventListener('click', e => {
 });
 
 async function selectCompany(ticker) {
+  // Clear previous company immediately
+  const rName = document.getElementById('rName');
+  const rTags = document.getElementById('rTags');
+  if (rName) rName.textContent = '';
+  if (rTags) rTags.innerHTML = '';
+  // Track usage for quick buttons
+  try {
+    const usage = JSON.parse(localStorage.getItem('arg_usage')||'{}');
+    usage[ticker] = (usage[ticker]||0) + 1;
+    localStorage.setItem('arg_usage', JSON.stringify(usage));
+  } catch(e) {}
   const company = COMPANIES.find(c => c.ticker === ticker);
   if (!company) return;
   currentCompany = company;
@@ -1230,28 +2072,7 @@ function renderOverview(ov, income, balance) {
       <div class="mc"><div class="ml">EV/EBITDA</div><div class="mv">${ov.EVToEBITDA&&ov.EVToEBITDA!=='None'?parseFloat(ov.EVToEBITDA).toFixed(1)+'x':'—'}</div><div class="ms">Enterprise value</div></div>
       <div class="mc"><div class="ml">Beta</div><div class="mv">${ov.Beta&&ov.Beta!=='None'?parseFloat(ov.Beta).toFixed(2):'—'}</div><div class="ms">Volatilidad relativa</div></div>
     </div>
-    <div class="cc">
-      <div class="ch"><span class="ct">Revenue y EBITDA (${unit})</span></div>
-      <div class="cw"><canvas id="chOv1" role="img" aria-label="Revenue EBITDA"></canvas></div>
-      <div class="leg">
-        <span class="ls"><span class="lsq" style="background:#00c896"></span>Revenue</span>
-        <span class="ls"><span class="lsq" style="background:#4d9fff"></span>EBITDA (EBIT+D&A)</span>
-      </div>
-    </div>
-    <div class="two">
-      <div class="cc" style="margin:0">
-        <div class="ch"><span class="ct">Net Income (${unit})</span></div>
-        <div class="cw" style="height:180px"><canvas id="chOv2" role="img" aria-label="Net Income"></canvas></div>
-      </div>
-      <div class="cc" style="margin:0">
-        <div class="ch"><span class="ct">Acerca de la empresa</span></div>
-        <p style="font-size:12px;color:var(--text2);line-height:1.7">${(ov.Description||'Sin descripción.').slice(0,350)}...</p>
-        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px">
-          ${['52WeekHigh','52WeekLow'].map(k=>ov[k]&&ov[k]!=='None'?`<span class="tag tag-sec">${k.replace('52Week','52s ')}: $${parseFloat(ov[k]).toFixed(2)}</span>`:''). join('')}
-          ${ov.AnalystTargetPrice&&ov.AnalystTargetPrice!=='None'?`<span class="tag tag-usd">Target analistas: $${parseFloat(ov.AnalystTargetPrice).toFixed(2)}</span>`:''}
-        </div>
-      </div>
-    </div>`;
+    `;
   setTimeout(() => {
 
 }, 50);
@@ -1305,18 +2126,7 @@ function renderIS(income, company) {
         </tr>`).join('')}
       </tbody>
     </table></div>
-    <div class="cc">
-      <div class="ch"><span class="ct">Revenue y EBITDA (${unit})</span></div>
-      <div class="cw"><canvas id="chIS1" role="img" aria-label="Revenue EBITDA IS"></canvas></div>
-      <div class="leg">
-        <span class="ls"><span class="lsq" style="background:#00c896"></span>Revenue</span>
-        <span class="ls"><span class="lsq" style="background:#4d9fff"></span>EBITDA</span>
-      </div>
-    </div>
-    <div class="cc">
-      <div class="ch"><span class="ct">EBITDA Margin (%)</span></div>
-      <div class="cw" style="height:160px"><canvas id="chIS2" role="img" aria-label="EBITDA Margin"></canvas></div>
-    </div>`;
+    `;
   setTimeout(() => {
 
 },50);
@@ -1362,15 +2172,7 @@ function renderBS(balance, company) {
         }).join('')}
       </tr>`).join('')}</tbody>
     </table></div>
-    <div class="cc">
-      <div class="ch"><span class="ct">Deuda bruta, caja y deuda neta (${unit})</span></div>
-      <div class="cw"><canvas id="chBS1" role="img" aria-label="Deuda y caja"></canvas></div>
-      <div class="leg">
-        <span class="ls"><span class="lsq" style="background:#ff5c5c"></span>Deuda bruta</span>
-        <span class="ls"><span class="lsq" style="background:#00c896"></span>Caja</span>
-        <span class="ls"><span class="lsq" style="background:#f5a623"></span>Deuda neta</span>
-      </div>
-    </div>`;
+    `;
   setTimeout(()=>{
 },50);
 }
@@ -1411,15 +2213,7 @@ function renderCF(cashflow, company) {
         }).join('')}
       </tr>`).join('')}</tbody>
     </table></div>
-    <div class="cc">
-      <div class="ch"><span class="ct">Operating CF, Capex y FCF (${unit})</span></div>
-      <div class="cw"><canvas id="chCF1" role="img" aria-label="Cash flows"></canvas></div>
-      <div class="leg">
-        <span class="ls"><span class="lsq" style="background:#00c896"></span>Operating CF</span>
-        <span class="ls"><span class="lsq" style="background:#f5a623"></span>Capex</span>
-        <span class="ls"><span class="lsq" style="background:#4d9fff"></span>FCF</span>
-      </div>
-    </div>`;
+    `;
   setTimeout(()=>{
 },50);
 }
@@ -2036,17 +2830,40 @@ renderAll = function(company) {
   onsData = []; // reset ONs
 };
 
-const QUICK = ['YPF','VIST','GGAL','PAM','MELI','LOMA'];
-const qb = document.getElementById('quickBtns');
-QUICK.forEach(t => {
-  const c = COMPANIES.find(x=>x.ticker===t);
-  if (!c) return;
-  const btn = document.createElement('button');
-  btn.className = 'quick-btn';
-  btn.textContent = `${c.ticker} · ${c.name.split(' ').slice(0,2).join(' ')}`;
-  btn.onclick = () => selectCompany(c.ticker);
-  qb.appendChild(btn);
-});
+// Quick buttons: show top-5 most used companies that have balances loaded
+function renderQuickBtns() {
+  const qb = document.getElementById('quickBtns');
+  if (!qb) return;
+  qb.innerHTML = '';
+
+  // Get companies with loaded balances
+  const db = balGetAll();
+  const loadedNames = [...new Set(Object.keys(db).map(k => k.split('||')[0]))];
+
+  // Get usage history (stored as {ticker: count})
+  let usage = {};
+  try { usage = JSON.parse(localStorage.getItem('arg_usage') || '{}'); } catch(e){}
+
+  // Map loaded names to COMPANIES entries (match by name or ticker)
+  const loaded = loadedNames
+    .map(name => COMPANIES.find(co => co.name === name || co.ticker === name)
+      || {ticker: name, name, sector:'', currency:'USD', _manual:true})
+    .sort((a,b) => (usage[b.ticker]||0) - (usage[a.ticker]||0))
+    .slice(0, 5);
+
+  if (!loaded.length) { qb.style.display='none'; return; }
+  qb.style.display='';
+  loaded.forEach(co => {
+    const btn = document.createElement('button');
+    btn.className = 'quick-btn';
+    btn.textContent = co._manual
+      ? co.name.split(' ').slice(0,2).join(' ')
+      : `${co.ticker} · ${co.name.split(' ').slice(0,2).join(' ')}`;
+    btn.onclick = () => selectCompany(co.ticker || co.name);
+    qb.appendChild(btn);
+  });
+}
+renderQuickBtns();
 
 
 // ── THEME & LANG INIT ─────────────────────────────────────────────────────────
@@ -2068,7 +2885,7 @@ QUICK.forEach(t => {
 })();
 
 updateCacheBadge();
-setStatus('Listo · ' + COMPANIES.length + ' empresas disponibles');
+setStatus('');
 
 // ── LANGUAGE ──────────────────────────────────────────────────────────────────
 
@@ -2167,103 +2984,139 @@ function initLang() {
   applyLang();
 }
 
+
+
 function applyLang() {
-  const isEN = currentLang === 'en';
-  // Lang button
-  const lb = document.getElementById('langBtn');
-  if (lb) lb.textContent = isEN ? '🌐 ES' : '🌐 EN';
   // Nav buttons
   const na = document.getElementById('navAnalysis');
   const nc = document.getElementById('navComparator');
-  if (na) na.textContent = isEN ? '📊 Analysis' : '📊 Análisis';
-  if (nc) nc.textContent = isEN ? '⇄ Comparator' : '⇄ Comparador';
-  // Period/currency toggles
-  const ba = document.getElementById('btnAnnual');
-  const bq = document.getElementById('btnQuarterly');
-  if (ba) ba.textContent = isEN ? 'Annual' : 'Anual';
-  if (bq) bq.textContent = isEN ? 'Quarterly' : 'Trimestral';
-  // Placeholder
+  const nb = document.getElementById('navBalances');
+  if (na) na.textContent = '📊 Análisis';
+  if (nc) nc.textContent = '⇄ Comparador';
+  if (nb) nb.textContent = '📁 Balances';
+  // Search placeholder
   const si = document.getElementById('searchInput');
-  if (si) si.placeholder = isEN
-    ? 'Search company: YPF, Vista, Galicia...'
-    : 'Buscar empresa: YPF, Vista, Galicia...';
-  // Re-render if comparator active
+  if (si) si.placeholder = 'Buscar empresa: YPF, Vista, Galicia...';
+  // Placeholder title/sub
+  const pt = document.querySelector('.ph-title');
+  const ps = document.querySelector('.ph-sub');
+  if (pt) pt.textContent = 'Análisis Financiero';
+  
+  // Analysis tabs
+  const tabMap = {
+    ov:'Overview', is:'Income Statement', bs:'Balance Sheet',
+    cf:'Cash Flow', rt:'Ratios', dcf:'DCF', ons:'ONs / Deuda', is2:'Base de datos'
+  };
+  document.querySelectorAll('.tab[onclick]').forEach(tab => {
+    const match = tab.getAttribute('onclick').match(/swTab\('(\w+)'/);
+    if (match && tabMap[match[1]]) tab.textContent = tabMap[match[1]];
+  });
+  // Period selects
+  const qs = document.getElementById('quarterSelect');
+  if (qs) {
+    const opts = {annual:'Anual', Q1:'Q1', Q2:'Q2', Q3:'Q3', Q4:'Q4'};
+    [...qs.options].forEach(o => { if (opts[o.value]) o.text = opts[o.value]; });
+  }
+  const ys = document.getElementById('yearSelect');
+  if (ys && ys.options[0]) ys.options[0].text = '— Año —';
+  // Balances tabs
+  const btv = document.getElementById('btabVer');
+  const btc = document.getElementById('btabCargar');
+  const bti = document.getElementById('btabIPC');
+  if (btv) btv.textContent = '📊 Ver balance';
+  if (btc) btc.textContent = '↑ Cargar balance';
+  if (bti) bti.textContent = '📈 IPC / Inflación';
+  // Status
+  const st = document.getElementById('statusText');
+  if (st && !currentCompany) st.textContent = 'Escribí el nombre o ticker de una empresa para comenzar';
+  // Re-render active views
+  if (currentCompany) renderAll(currentCompany);
   const cv = document.getElementById('comparatorView');
   if (cv && cv.classList.contains('active')) renderComparator();
 }
 
-function getGICS(sector) {
-  return SECTOR_TO_GICS[sector] || 'Energy';
-}
-// ── THEME TOGGLE ─────────────────────────────────────────────────────────────
-function toggleTheme() {
-  isDarkMode = !isDarkMode;
-  document.body.classList.toggle('dark', isDarkMode);
-  const btn = document.getElementById('themeBtn');
-  if (btn) btn.textContent = isDarkMode ? '☀ Claro' : '☾ Oscuro';
-  localStorage.setItem('arg_theme', isDarkMode ? 'dark' : 'light');
-  // Redraw charts with new colors
-  Object.values(chartInstances).forEach(ch => ch.destroy());
-  chartInstances = {};
-  if (currentCompany) renderAll(currentCompany);
-}
-
-// (old initTheme removed)
-
-// isDarkMode declared earlier
-
-// ── VIEW SWITCHER ─────────────────────────────────────────────────────────────
-function switchView(view) {
-  const av = document.getElementById('analysisView');
-  const cv = document.getElementById('comparatorView');
-  const bv = document.getElementById('balancesView');
-
-  // Hide all views
-  if(av) av.style.display='none';
-  if(cv) cv.classList.remove('active');
-  if(bv) bv.classList.remove('active');
-
-  // Reset nav button styles
-  const navBtns = ['navAnalysis','navComparator','navBalances'];
-  navBtns.forEach(id => {
-    const b = document.getElementById(id);
-    if(b) { b.style.background='transparent'; b.style.color='var(--text3)'; }
+function getAvailablePeriods(names) {
+  const db = balGetAll();
+  const periods = new Set();
+  names.forEach(name => {
+    Object.keys(db).filter(k => k.startsWith(name+'||')).forEach(k => {
+      const [,year,q] = k.split('||');
+      if (['Q1','Q2','Q3','Q4'].includes(q)) periods.add(`${year}||${q}`);
+    });
   });
+  return [...periods].sort((a,b) => {
+    const [ay,aq] = a.split('||'); const [by,bq] = b.split('||');
+    return ay!==by ? ay.localeCompare(by) : aq.localeCompare(bq);
+  });
+}
 
-  // Activate selected view
-  if(view==='analysis'){
-    if(av) av.style.display='';
-    const b=document.getElementById('navAnalysis');
-    if(b){ b.style.background='var(--green2)'; b.style.color='var(--green)'; }
-  } else if(view==='comparator'){
-    if(cv) cv.classList.add('active');
-    const b=document.getElementById('navComparator');
-    if(b){ b.style.background='var(--green2)'; b.style.color='var(--green)'; }
-    renderComparator();
-  } else {
-    if(bv) bv.classList.add('active');
-    const b=document.getElementById('navBalances');
-    if(b){ b.style.background='var(--green2)'; b.style.color='var(--green)'; }
-    renderBalTree();
-  }
+function periodLabel(p) {
+  const [year, q] = p.split('||');
+  return `${q} ${year}`;
+}
+
+// Get value of a metric key from a manual balance entry
+function getMetricValue(entry, metricKey) {
+  if (!entry) return null;
+  const d = calcDerived(entry);
+  const mult = entry._unidad==='Miles' ? 1e3 : entry._unidad==='Millones' ? 1e6 : 1;
+  const m = v => (v!==null&&v!==undefined&&!isNaN(v)) ? v*mult/1e6 : null;
+  const ebitda  = d.ebitda_calc ?? d.ebitda_rep ?? null;
+  const ebitdaM = ebitda ? ebitda * mult / 1e6 : null;
+  const revM    = d.revenue ? d.revenue * mult / 1e6 : null;
+  const niM     = d.net_income ? d.net_income * mult / 1e6 : null;
+  const ndM     = d.net_debt ? d.net_debt * mult / 1e6 : null;
+  const eqM     = d.equity ? d.equity * mult / 1e6 : null;
+  // Market metrics — use stored or compute from mkt_cap if available
+  const mktCap  = entry.mkt_cap || null;                        // stored directly in USD M
+  const roe     = (niM && eqM && eqM!==0) ? (niM/eqM)*100 : null;
+  const grossDebt = entry.debt_st && entry.debt_lt
+    ? (parseFloat(entry.debt_st)+parseFloat(entry.debt_lt))*mult/1e6 : null;
+  const map = {
+    revenue:    m(d.revenue),
+    ebitda:     m(ebitda),
+    adj_ebitda: m(d.adj_ebitda ?? ebitda),
+    net_income: m(d.net_income),
+    net_debt:   ndM,
+    gross_debt: grossDebt,
+    ebitda_m:   (ebitda && d.revenue) ? (ebitda/d.revenue)*100 : null,
+    net_margin: (d.net_income && d.revenue) ? (d.net_income/d.revenue)*100 : null,
+    nd_ebitda:  (ndM && ebitdaM && ebitdaM!==0) ? ndM/ebitdaM : null,
+    roe:        roe,
+    cfo:        m(d.cfo),
+    capex:      m(d.capex ? -Math.abs(d.capex) : null),
+    fcf:        m(d.fcf),
+    equity:     eqM,
+    // Market metrics — need mkt_cap stored
+    mkt_cap:    mktCap,
+    pe:         (mktCap && niM && niM>0) ? mktCap/niM : null,
+    pbv:        (mktCap && eqM && eqM>0) ? mktCap/eqM : null,
+    ev_ebitda:  (mktCap && ndM && ebitdaM && ebitdaM>0) ? (mktCap+ndM)/ebitdaM : null,
+    // Legacy key aliases
+    ni_margin:  (d.net_income && d.revenue) ? (d.net_income/d.revenue)*100 : null,
+    net_lev:    (ndM && ebitdaM && ebitdaM!==0) ? ndM/ebitdaM : null,
+  };
+  return map[metricKey] ?? null;
 }
 
 function renderComparator() {
-  const GICS_11 = ['Energy','Materials','Industrials','Consumer Discretionary',
-    'Consumer Staples','Health Care','Financials','Information Technology',
-    'Communication Services','Utilities','Real Estate'];
+  const names = compSlots.filter(Boolean).map(t => {
+    const co = COMPANIES.find(c=>c.ticker===t);
+    return co ? co.name : t;
+  });
 
-  // Suggest sector based on selected companies
-  const suggested = compSlots.filter(Boolean)
-    .map(t => COMPANIES.find(c => c.ticker === t)?.sector)
-    .find(Boolean) || 'Energy';
+  const allPeriods = getAvailablePeriods(names);
+  if (!compRangeFrom && allPeriods.length) compRangeFrom = allPeriods[0];
+  if (!compRangeTo   && allPeriods.length) compRangeTo   = allPeriods[allPeriods.length-1];
+  if (!compTablePeriod && allPeriods.length) compTablePeriod = allPeriods[allPeriods.length-1];
 
-  if (!compSelectedSector) compSelectedSector = suggested;
+  const mkOpts = (sel) => allPeriods.map(p =>
+    `<option value="${p}" ${p===sel?'selected':''}>${periodLabel(p)}</option>`).join('');
 
   document.getElementById('compContent').innerHTML = `
     <div style="margin-bottom:1.25rem">
       <h2 style="font-size:18px;font-weight:600;margin-bottom:4px;color:var(--text)">Comparador de empresas</h2>
-      <p style="font-size:13px;color:var(--text3)">Compará hasta 3 empresas entre sí y vs. benchmark GICS</p>
+      <p style="font-size:13px;color:var(--text3)">Compará hasta 3 empresas entre sí</p>
     </div>
 
     <div class="cc">
@@ -2276,63 +3129,77 @@ function renderComparator() {
             </div>
             <div class="comp-slot-wrap">
               <input id="cIn${i}" type="text"
-                placeholder="${i===0?'YPF, Vista...':'Agregar empresa...'}"
+                placeholder="${i===0?"Buscar empresa...":"Agregar empresa..."}"
                 value="${compSlots[i] ? (COMPANIES.find(c=>c.ticker===compSlots[i])?.name || compSlots[i]) : ''}"
                 oninput="compSearch(${i}, this.value)" autocomplete="off"
                 style="border-color:${compSlots[i] ? COMP_COLORS[i] : 'var(--border2)'}">
               <div class="comp-dd" id="cDd${i}"></div>
             </div>
+            ${compSlots[i] ? `<button onclick="compClear(${i})"
+              style="margin-top:4px;font-size:10px;color:var(--text3);background:none;border:none;cursor:pointer;padding:0">✕ Quitar</button>` : ''}
           </div>`).join('')}
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;
+          padding:6px 10px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius)">
+          <input type="checkbox" ${compIncludeSector?'checked':''} 
+            onchange="compIncludeSector=this.checked;runComparison()"
+            style="accent-color:var(--amber)">
+          <span style="color:var(--amber);font-weight:500;font-size:11px">Incluir benchmark GICS</span>
+        </label>
+        <select id="sectorSelect" onchange="compSelectedSector=this.value;runComparison()"
+          style="padding:6px 10px;background:var(--bg3);border:0.5px solid var(--border2);
+            border-radius:var(--radius);color:var(--text);font-size:12px;
+            font-family:'DM Sans',sans-serif;cursor:pointer;outline:none">
+          ${['Energy','Materials','Industrials','Consumer Discretionary','Consumer Staples',
+             'Health Care','Financials','Information Technology',
+             'Communication Services','Utilities','Real Estate'].map(s=>
+            `<option value="${s}" ${compSelectedSector===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </div>
+    </div>
 
-        <div style="display:flex;flex-direction:column;gap:6px;min-width:190px">
-          <div class="comp-slot-label">Benchmark GICS</div>
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;
-            padding:7px 10px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius)">
-            <input type="checkbox" ${compIncludeSector?'checked':''} 
-              onchange="compIncludeSector=this.checked;runComparison()"
-              style="accent-color:var(--amber)">
-            <span style="color:var(--amber);font-weight:500;font-size:11px">Incluir benchmark</span>
-          </label>
-          <select id="sectorSelect"
-            onchange="compSelectedSector=this.value;runComparison()"
-            style="padding:7px 10px;background:var(--bg3);border:0.5px solid var(--border2);
-              border-radius:var(--radius);color:var(--text);font-size:12px;
-              font-family:'DM Sans',sans-serif;cursor:pointer;outline:none">
-            ${GICS_11.map(s =>
-              `<option value="${s}" ${compSelectedSector===s?'selected':''}>${s}</option>`
-            ).join('')}
+    <div class="cc">
+      <div class="ch"><span class="ct">Gráfico de evolución</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:11px;color:var(--text3)">Desde</span>
+          <select id="compFrom" onchange="compRangeFrom=this.value;runComparison()"
+            style="padding:4px 8px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:6px;color:var(--text);font-size:11px;outline:none">
+            ${mkOpts(compRangeFrom)}
           </select>
-          ${suggested !== compSelectedSector ? `
-            <div style="font-size:10px;color:var(--text3)">
-              Sugerido:
-              <span style="color:var(--amber);cursor:pointer;text-decoration:underline"
-                onclick="compSelectedSector='${suggested}';document.getElementById('sectorSelect').value='${suggested}';runComparison()">
-                ${suggested}
-              </span>
-            </div>` :
-            `<div style="font-size:10px;color:var(--green)">✓ Sector sugerido</div>`
-          }
-          <button class="comp-run-btn" onclick="runComparison()">Comparar →</button>
+          <span style="font-size:11px;color:var(--text3)">Hasta</span>
+          <select id="compTo" onchange="compRangeTo=this.value;runComparison()"
+            style="padding:4px 8px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:6px;color:var(--text);font-size:11px;outline:none">
+            ${mkOpts(compRangeTo)}
+          </select>
         </div>
       </div>
-    </div>
-
-    <div class="cc" style="margin-bottom:1.25rem">
-      <div class="ch">
-        <span class="ct">Métricas a mostrar</span>
-        <span style="font-size:11px;color:var(--text3)">Clickeá para activar/desactivar</span>
-      </div>
-      <div class="comp-metric-picker">
+      <div class="comp-metric-picker" style="margin-bottom:1rem">
         ${ALL_METRICS.map(m =>
-          `<span class="metric-chip ${compActiveMetrics.has(m.key)?'active':''}"
-            onclick="toggleMetric('${m.key}')">${mLabel(m)}</span>`
+          `<span class="metric-chip ${compActiveMetric===m.key?'active':''}"
+            data-key="${m.key}"
+            onclick="selectMetric('${m.key}')">${mLabel(m)}</span>`
         ).join('')}
       </div>
+      <div style="position:relative;height:280px">
+        <canvas id="compChart"></canvas>
+      </div>
     </div>
 
-    <div id="compResults"></div>`;
+    <div class="cc">
+      <div class="ch">
+        <span class="ct">Tabla de métricas</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:11px;color:var(--text3)">Período</span>
+          <select id="compTableSel" onchange="compTablePeriod=this.value;runComparison()"
+            style="padding:4px 8px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:6px;color:var(--text);font-size:11px;outline:none">
+            ${mkOpts(compTablePeriod)}
+          </select>
+        </div>
+      </div>
+      <div id="compTable"></div>
+    </div>`;
 
-  // Close dropdowns on outside click
   setTimeout(() => {
     document.addEventListener('click', function _compOut(e) {
       [0,1,2].forEach(i => {
@@ -2346,982 +3213,235 @@ function renderComparator() {
 }
 
 function compSearch(slot, q) {
-  const dd = document.getElementById('compDd'+slot);
+  const dd = document.getElementById('cDd'+slot);
   if (!dd) return;
   if (q.length < 1) { dd.classList.remove('open'); return; }
-  const matches = COMPANIES.filter(c =>
+  // Also search manual balances
+  const db = balGetAll();
+  const manualNames = [...new Set(Object.keys(db).map(k => k.split('||')[0]))];
+  const manualMatches = manualNames
+    .filter(n => n.toLowerCase().includes(q.toLowerCase()))
+    .map(n => ({ ticker: n, name: n, sector: '', currency: 'USD', _manual: true }));
+  const avMatches = COMPANIES.filter(c =>
     c.ticker.toLowerCase().includes(q.toLowerCase()) ||
     c.name.toLowerCase().includes(q.toLowerCase())
-  ).slice(0,6);
-  if (!matches.length) { dd.classList.remove('open'); return; }
-  dd.innerHTML = matches.map(c=>`
-    <div class="dd-item" onclick="selectCompSlot(${slot},'${c.ticker}')">
-      <span class="dd-ticker ${c.currency==='ARS'?'ars':''}">${c.ticker}</span>
-      <span class="dd-name">${c.name}</span>
-      <span class="dd-sector">${c.sector}</span>
+  );
+  // Merge, deduplicate by name
+  const allMatches = [...manualMatches, ...avMatches]
+    .filter((v,i,a) => a.findIndex(x=>x.name===v.name)===i)
+    .slice(0,6);
+  if (!allMatches.length) { dd.classList.remove('open'); return; }
+  dd.innerHTML = allMatches.map(co=>`
+    <div class="dd-item" onclick="selectCompSlot(${slot},'${co.ticker}',${co._manual?'true':'false'})">
+      <span class="dd-ticker ${co.currency==='ARS'?'ars':''}">${co._manual?'BAL':co.ticker}</span>
+      <span class="dd-name">${co.name}</span>
+      <span class="dd-sector">${co.sector||'Manual'}</span>
     </div>`).join('');
   dd.classList.add('open');
 }
 
-function selectCompSlot(slot, ticker) {
+function selectCompSlot(slot, ticker, isManual=false) {
   compSlots[slot] = ticker;
-  const c = COMPANIES.find(x=>x.ticker===ticker);
-  const inp = document.getElementById('compInput'+slot);
-  if (inp) { inp.value = c ? c.name : ticker; inp.style.borderColor = COMP_COLORS[slot]; }
-  document.getElementById('compDd'+slot)?.classList.remove('open');
-}
-
-function toggleMetric(key) {
-  if (compActiveMetrics.has(key)) compActiveMetrics.delete(key);
-  else compActiveMetrics.add(key);
+  // Auto-suggest sector from first company
+  if (!compSelectedSector) {
+    const co = COMPANIES.find(c=>c.ticker===ticker);
+    if (co?.sector) compSelectedSector = co.sector;
+    else compSelectedSector = 'Energy'; // default for manual
+  }
   renderComparator();
 }
 
-function extractMetrics(ticker) {
-  const cached = cacheGet(ticker);
-  if (!cached) return null;
-  const { overview, income, balance, cashflow } = cached;
-  const company = COMPANIES.find(c=>c.ticker===ticker);
-  const isARS = company?.currency === 'ARS';
-  const iRep = income?.annualReports?.[0] || {};
-  const bRep = balance?.annualReports?.[0] || {};
-  const cRep = cashflow?.annualReports?.[0] || {};
-  const fxI = isARS ? getFxAvg(iRep.fiscalDateEnding||'2024-12-31') : 1;
-  const fxB = isARS ? getFxEop(bRep.fiscalDateEnding||'2024-12-31') : 1;
-  const rev = (num(iRep.totalRevenue)||0)/fxI/1e6;
-  const ebit = (num(iRep.ebit)||0)/fxI/1e6;
-  const da = (num(iRep.depreciationAndAmortization)||0)/fxI/1e6;
-  const ebitda = ebit+da;
-  const ni = (num(iRep.netIncome)||0)/fxI/1e6;
-  const std = (num(bRep.shortTermDebt)||0)/fxB/1e6;
-  const ltd = (num(bRep.longTermDebt)||0)/fxB/1e6;
-  const cash = (num(bRep.cashAndCashEquivalentsAtCarryingValue)||0)/fxB/1e6;
-  const net_debt = std+ltd-cash;
-  const gross_debt = std+ltd;
-  const ocf = (num(cRep.operatingCashflow)||0)/fxI/1e6;
-  const capex = Math.abs((num(cRep.capitalExpenditures)||0)/fxI/1e6);
-  const fcf = ocf-capex;
-  const mkt_cap = num(overview.MarketCapitalization) ? num(overview.MarketCapitalization)/1e6 : null;
-  return {
-    revenue:rev, ebitda, net_income:ni, net_debt, gross_debt, capex, fcf, mkt_cap,
-    ebitda_m: rev>0?ebitda/rev:null, net_margin: rev>0?ni/rev:null,
-    pe:num(overview.PERatio), ev_ebitda:num(overview.EVToEBITDA),
-    pbv:num(overview.PriceToBookRatio), roe:num(overview.ReturnOnEquityTTM),
-    nd_ebitda: ebitda>0?net_debt/ebitda:null,
-    name: overview.Name||company?.name||ticker, ticker, sector:company?.sector||overview.Sector,
-    color: COMP_COLORS[compSlots.indexOf(ticker)],
-  };
+
+function selectMetric(key) {
+  compActiveMetric = key;
+  // Update chip styles
+  document.querySelectorAll('.metric-chip').forEach(el => {
+    el.classList.toggle('active', el.dataset.key === key);
+  });
+  runComparison();
 }
 
-function getSectorBenchmark(sector) {
-  // sector is always a GICS sector string
-  const GICS_BENCHMARKS = {
-    'Energy':                {ebitda_m:0.26,net_margin:0.09,pe:11,ev_ebitda:5.8, pbv:1.9,roe:0.17,nd_ebitda:1.5},
-    'Materials':             {ebitda_m:0.22,net_margin:0.08,pe:15,ev_ebitda:8.0, pbv:2.2,roe:0.14,nd_ebitda:1.8},
-    'Industrials':           {ebitda_m:0.18,net_margin:0.08,pe:20,ev_ebitda:12.0,pbv:3.5,roe:0.18,nd_ebitda:1.5},
-    'Consumer Discretionary':{ebitda_m:0.14,net_margin:0.06,pe:22,ev_ebitda:11.0,pbv:4.0,roe:0.20,nd_ebitda:1.8},
-    'Consumer Staples':      {ebitda_m:0.16,net_margin:0.07,pe:20,ev_ebitda:12.5,pbv:5.0,roe:0.28,nd_ebitda:2.0},
-    'Health Care':           {ebitda_m:0.22,net_margin:0.12,pe:22,ev_ebitda:13.0,pbv:4.5,roe:0.20,nd_ebitda:1.0},
-    'Financials':            {ebitda_m:0.45,net_margin:0.22,pe:12,ev_ebitda:null,pbv:1.5,roe:0.13,nd_ebitda:null},
-    'Information Technology':{ebitda_m:0.27,net_margin:0.18,pe:28,ev_ebitda:18.0,pbv:8.0,roe:0.35,nd_ebitda:-0.5},
-    'Communication Services':{ebitda_m:0.28,net_margin:0.12,pe:18,ev_ebitda:9.0, pbv:2.8,roe:0.14,nd_ebitda:1.8},
-    'Utilities':             {ebitda_m:0.38,net_margin:0.12,pe:16,ev_ebitda:10.0,pbv:1.8,roe:0.10,nd_ebitda:4.5},
-    'Real Estate':           {ebitda_m:0.55,net_margin:0.18,pe:35,ev_ebitda:18.0,pbv:1.5,roe:0.06,nd_ebitda:6.0},
-  };
-  const b = GICS_BENCHMARKS[sector] || GICS_BENCHMARKS['Energy'];
-
-  // Enrich with real cached data from same-sector companies
-  const db = cacheGetAll();
-  const peers = COMPANIES
-    .filter(c => c.sector === sector && !compSlots.includes(c.ticker))
-    .map(c => c.ticker)
-    .filter(t => db[t]);
-  const ml = peers.map(t => extractMetrics(t)).filter(Boolean);
-  const avg = (key, fallback) => {
-    const vals = ml.map(m => m[key]).filter(v => v !== null && !isNaN(v));
-    return vals.length ? vals.reduce((a,x) => a+x, 0) / vals.length : fallback;
-  };
-  const lbl = ml.length > 0
-    ? `GICS ${sector} (${ml.length} emp. en caché)`
-    : `GICS ${sector} · Mediana S&P global`;
-
-  return {
-    revenue: avg('revenue', null), ebitda: avg('ebitda', null),
-    net_income: avg('net_income', null), net_debt: null,
-    ebitda_m: avg('ebitda_m', b.ebitda_m), net_margin: avg('net_margin', b.net_margin),
-    pe: avg('pe', b.pe), ev_ebitda: avg('ev_ebitda', b.ev_ebitda),
-    pbv: avg('pbv', b.pbv), roe: avg('roe', b.roe), nd_ebitda: avg('nd_ebitda', b.nd_ebitda),
-    capex: null, fcf: null, mkt_cap: null,
-    name: lbl, ticker: 'SECTOR', sector,
-    isBenchmark: true, color: '#b87a00',
-  };
+function compClear(slot) {
+  compSlots[slot] = null;
+  renderComparator();
 }
 
-async function runComparison() {
-  const res = document.getElementById('compResults');
-  if (!res) return;
-  const tickers = compSlots.filter(Boolean);
-  if (!tickers.length) {
-    res.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text3)">Seleccioná al menos una empresa para comparar</div>';
-    return;
-  }
-  res.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text3)"><div class="spinner" style="margin:0 auto 12px"></div>Cargando datos...</div>';
+function runComparison() {
+  const db = balGetAll();
+  const slots = compSlots.filter(Boolean);
+  if (!slots.length) return;
 
-  for (const ticker of tickers) {
-    if (!cacheGet(ticker)) {
-      try {
-        setStatus('Cargando '+ticker+' para comparador...','amber');
-        await fetchAllData(COMPANIES.find(c=>c.ticker===ticker));
-      } catch(e) {
-        res.innerHTML = '<div class="err-box">Error cargando '+ticker+': '+e.message+'</div>';
-        return;
+  const companies = slots.map(t => {
+    const co = COMPANIES.find(c=>c.ticker===t) || {name:t,ticker:t,sector:'',currency:'USD'};
+    return co;
+  });
+  const names = companies.map(co => co.name);
+
+  const allPeriods = getAvailablePeriods(names);
+  const fromIdx = allPeriods.indexOf(compRangeFrom);
+  const toIdx   = allPeriods.indexOf(compRangeTo);
+  const rangePeriods = allPeriods.slice(
+    fromIdx >= 0 ? fromIdx : 0,
+    toIdx   >= 0 ? toIdx+1 : allPeriods.length
+  );
+
+  // ── Chart ──────────────────────────────────────────────────────────────────
+  const chartEl = document.getElementById('compChart');
+  if (chartEl && rangePeriods.length) {
+    destroyChart('compChart');
+    const labels = rangePeriods.map(periodLabel);
+    const datasets = companies.map((co, i) => {
+      const vals = rangePeriods.map(p => {
+        const [year,q] = p.split('||');
+        const entry = db[`${co.name}||${year}||${q}`];
+        return getMetricValue(entry, compActiveMetric);
+      });
+      return {
+        label: co.name,
+        data: vals,
+        borderColor: COMP_COLORS[i],
+        backgroundColor: COMP_COLORS_BG[i],
+        borderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        tension: 0.3,
+        spanGaps: true,
+      };
+    });
+
+    // Add benchmark as flat line if enabled
+    if (compIncludeSector && compSelectedSector && GICS_BENCHMARKS[compSelectedSector]) {
+      const bench = GICS_BENCHMARKS[compSelectedSector];
+      // Map metric key to benchmark field
+      const benchMap = {
+        ebitda_m:  bench.ebitda_m   !== undefined ? bench.ebitda_m * 100   : null,
+        net_margin: bench.net_margin !== undefined ? bench.net_margin * 100 : null,
+        nd_ebitda:  bench.nd_ebitda  !== undefined ? bench.nd_ebitda        : null,
+        pe:         bench.pe         !== undefined ? bench.pe               : null,
+        ev_ebitda:  bench.ev_ebitda  !== undefined ? bench.ev_ebitda        : null,
+        pbv:        bench.pbv        !== undefined ? bench.pbv              : null,
+        roe:        bench.roe        !== undefined ? bench.roe * 100        : null,
+      };
+      const benchVal = benchMap[compActiveMetric] ?? null;
+      if (benchVal !== null && rangePeriods.length) {
+        datasets.push({
+          label: `Benchmark ${compSelectedSector}`,
+          data: rangePeriods.map(() => benchVal),
+          borderColor: '#f5a623',
+          backgroundColor: 'rgba(245,166,35,0.08)',
+          borderWidth: 1.5,
+          borderDash: [6, 3],
+          pointRadius: 0,
+          tension: 0,
+          spanGaps: true,
+        });
       }
     }
-  }
-
-  const companies = tickers.map(t=>extractMetrics(t)).filter(Boolean);
-  if (!companies.length) {
-    res.innerHTML = '<div class="err-box">No hay datos en caché. Buscá las empresas primero en la pestaña Análisis.</div>';
-    return;
-  }
-
-  const sector = compSelectedSector || companies[0]?.sector || 'Energy';
-  const benchmark = compIncludeSector ? getSectorBenchmark(sector) : null;
-  const allEntities = benchmark ? [...companies, benchmark] : companies;
-  const activeMetricDefs = ALL_METRICS.filter(m => compActiveMetrics.has(m.key));
-
-  let html = '';
-  activeMetricDefs.forEach(metric => {
-    const vals = allEntities.map(e=>({ name:e.name, ticker:e.ticker, val:e[metric.key], color:e.color, isBenchmark:e.isBenchmark }));
-    const numericVals = vals.filter(v=>v.val!==null&&!isNaN(v.val));
-    if (!numericVals.length) return;
-    const sorted = [...numericVals].sort((a,b)=>metric.higherBetter?b.val-a.val:a.val-b.val);
-    const fmtVal = (v) => v===null ? '—' :
-      (metric.key.includes('_m')||metric.key==='roe') ? (v*100).toFixed(1)+'%' :
-      ['pe','ev_ebitda','pbv','nd_ebitda'].includes(metric.key) ? v.toFixed(1)+'x' :
-      '$'+Math.round(v).toLocaleString()+'M';
-    html += `<div class="cc"><div class="ch"><span class="ct">${mLabel(metric)}</span>${benchmark?'<span class="sector-badge">vs. '+sector+'</span>':''}</div>
-      <div class="comp-summary-grid">
-        ${vals.map(v => {
-          const rank = sorted.findIndex(s=>s.ticker===v.ticker);
-          const rankCls = rank===0?'rank-1':rank===1?'rank-2':'rank-3';
-          const isWinner = rank===0&&!v.isBenchmark&&v.val!==null;
-          return '<div class="comp-summary-card '+(isWinner?'winner':'')+'">'+
-            (isWinner?'<span class="winner-crown">&#x1F451;</span>':'')+
-            '<div class="comp-co-label" style="color:'+v.color+'">'+( v.ticker==='SECTOR'?'SECTOR':v.ticker)+'</div>'+
-            '<div class="comp-metric-val '+rankCls+'">'+fmtVal(v.val)+'</div>'+
-            '<div class="comp-metric-sub">'+v.name.split(' ').slice(0,3).join(' ')+'</div>'+
-            (v.val!==null?'<div style="font-size:10px;color:var(--text3);margin-top:3px">#'+(rank+1)+' de '+numericVals.length+'</div>':'')+
-            '</div>';
-        }).join('')}
-      </div>
-      <div style="height:160px;position:relative"><canvas id="compChart_${metric.key}" role="img" aria-label="Comparación ${mLabel(metric)}"></canvas></div>
-    </div>`;
-  });
-
-  // Full table
-  html += '<div class="cc"><div class="ch"><span class="ct">Tabla comparativa completa</span></div><div class="comp-table-wrap"><table class="comp-table"><thead><tr><th style="text-align:left">Métrica</th>'+
-    allEntities.map(e=>'<th style="color:'+e.color+'">'+(e.ticker==='SECTOR'?'Sector':e.ticker)+'</th>').join('')+
-    '<th>Mejor</th></tr></thead><tbody>'+
-    activeMetricDefs.map(metric => {
-      const vals = allEntities.map(e=>e[metric.key]);
-      const numericVals = vals.filter(v=>v!==null&&!isNaN(v));
-      const best = numericVals.length?(metric.higherBetter?Math.max(...numericVals):Math.min(...numericVals)):null;
-      const bestEntity = best!==null?allEntities.find(e=>e[metric.key]===best):null;
-      const fmtV = (v) => v===null?'—':
-        (metric.key.includes('_m')||metric.key==='roe')?(v*100).toFixed(1)+'%':
-        ['pe','ev_ebitda','pbv','nd_ebitda'].includes(metric.key)?v.toFixed(1)+'x':
-        '$'+Math.round(v).toLocaleString()+'M';
-      return '<tr><td>'+mLabel(metric)+'</td>'+
-        allEntities.map(e=>{const isBest=e[metric.key]!==null&&e[metric.key]===best&&!e.isBenchmark;return '<td class="'+(isBest?'rank-1':'')+'" style="'+(isBest?'font-weight:600':'')+'">'+fmtV(e[metric.key])+'</td>';}).join('')+
-        '<td style="color:var(--green);font-size:11px">'+(bestEntity&&!bestEntity.isBenchmark?bestEntity.ticker:'—')+'</td></tr>';
-    }).join('')+
-    '</tbody></table></div></div>';
-
-  res.innerHTML = html;
-  setStatus('Comparación completada', 'green');
-
-  setTimeout(() => {
-    const isDark = !document.body.classList.contains('light');
-    const gc2 = isDark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.05)';
-    const tc2 = isDark?'#555c66':'#8a93a0';
-    activeMetricDefs.forEach(metric => {
-      const el = document.getElementById('compChart_'+metric.key);
-      if (!el) return;
-      destroyChart('compChart_'+metric.key);
-      const labels = allEntities.map(e=>e.ticker==='SECTOR'?'Sector':e.ticker);
-      const data   = allEntities.map(e=>e[metric.key]);
-      const bgC = allEntities.map((e,i)=>e.isBenchmark?'rgba(245,166,35,0.25)':COMP_COLORS_BG[i]||COMP_COLORS_BG[0]);
-      const brC = allEntities.map((e,i)=>e.isBenchmark?'#f5a623':COMP_COLORS[i]||COMP_COLORS[0]);
-      chartInstances['compChart_'+metric.key] = new Chart(el, {
-        type:'bar',
-        data:{labels,datasets:[{label:mLabel(metric),data,backgroundColor:bgC,borderColor:brC,borderWidth:1.5,borderRadius:4}]},
-        options:{responsive:true,maintainAspectRatio:false,
-          plugins:{legend:{display:false},tooltip:{backgroundColor:isDark?'#1a1e25':'#fff',borderColor:'rgba(0,0,0,0.1)',borderWidth:1,titleColor:tc2,bodyColor:isDark?'#e8eaed':'#0d0f12'}},
-          scales:{
-            x:{grid:{color:gc2},ticks:{color:tc2,font:{size:11,family:'DM Mono'}}},
-            y:{grid:{color:gc2},ticks:{color:tc2,font:{size:10,family:'DM Mono'},
-              callback:v=>{
-                if(metric.key.includes('_m')||metric.key==='roe') return (v*100).toFixed(0)+'%';
-                if(['pe','ev_ebitda','pbv','nd_ebitda'].includes(metric.key)) return v.toFixed(1)+'x';
-                return Math.abs(v)>=1000?(v/1000).toFixed(0)+'k':v;
-              }
-            }}
-          }
+    const metricDef = ALL_METRICS.find(m=>m.key===compActiveMetric);
+    const metricName = metricDef ? mLabel(metricDef) : compActiveMetric;
+    mkChart('compChart', 'line', labels, datasets, {
+      plugins: {
+        legend: { display: true, position: 'top',
+          labels: { color: 'var(--text2)', font:{size:11,family:"'DM Sans'"}, boxWidth:12 }
+        },
+        tooltip: { callbacks: {
+          label: ctx => `${ctx.dataset.label}: ${ctx.raw!==null ? ctx.raw.toLocaleString('es-AR',{maximumFractionDigits:1}) : '—'}`
+        }}
+      },
+      scales: {
+        x: { grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#555c66',font:{size:10}} },
+        y: { grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#555c66',font:{size:10},
+             callback: v => v.toLocaleString('es-AR',{maximumFractionDigits:0}) },
+             title: { display:true, text: metricName, color:'#555c66', font:{size:10} }
         }
-      });
+      }
     });
-  }, 80);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// BALANCES MODULE
-// ═══════════════════════════════════════════════════════════════════════════════
-
-const BAL_PIN      = '1234';
-const BAL_STORE    = 'arg_balances_v2';
-const IPC_STORE    = 'arg_ipc_v1';
-
-// ── Field definitions ─────────────────────────────────────────────────────────
-const BAL_FIELDS = {
-  eerr: [
-    {key:'revenue',      lbl:'Revenues / Ingresos totales',                    calc:false},
-    {key:'costs',        lbl:'Costs / Costo de ventas',                        calc:false},
-    {key:'gross_profit', lbl:'Gross Profit / Resultado bruto',                 calc:'auto', editable:true, formula:'revenue+costs'},
-    {key:'da',           lbl:'D&A / Depreciación y amortización',              calc:false},
-    {key:'ebit',         lbl:'Operating Income / EBIT',                        calc:false},
-    {key:'ebitda_calc',  lbl:'EBITDA (calculado: EBIT + D&A)',                 calc:'auto', display:true, formula:'ebit+|da|'},
-    {key:'ebitda_rep',   lbl:'EBITDA Reportado (si lo reportan)',              calc:false, optional:true},
-    {key:'adj_ebitda',   lbl:'Adjusted EBITDA (si lo reportan)',               calc:false, optional:true},
-    {key:'fin_income',   lbl:'Financial Income / Ingreso financiero',          calc:false},
-    {key:'fin_cost',     lbl:'Financial Cost / Egreso financiero',             calc:false},
-    {key:'fin_net',      lbl:'Net Financial Results (Ing. - Egr., calculado)', calc:'auto', display:true, formula:'fin_income+fin_cost'},
-    {key:'tax',          lbl:'Income Tax / Impuesto a las ganancias',          calc:false},
-    {key:'net_income',   lbl:'Net Income / Resultado del ejercicio',           calc:false},
-  ],
-  balance: [
-    {key:'cash',               lbl:'Cash & equivalents / Caja',                    calc:false},
-    {key:'current_assets',     lbl:'Total Current Assets / Activo corriente',      calc:false},
-    {key:'non_current_assets', lbl:'Total Non-current Assets / Activo no corriente', calc:false},
-    {key:'debt_st',            lbl:'Short-term debt / Deuda financiera CP',        calc:false},
-    {key:'current_liab',       lbl:'Total Current Liabilities / Pasivo corriente', calc:false},
-    {key:'debt_lt',            lbl:'Long-term debt / Deuda financiera LP',         calc:false},
-    {key:'non_current_liab',   lbl:'Total Non-current Liabilities / Pasivo no corriente', calc:false},
-    {key:'equity',             lbl:"Total Shareholders' Equity / Patrimonio neto", calc:false},
-  ],
-  flujo: [
-    {key:'cfo',               lbl:'Net cash flow from operating activities / FCO', calc:false},
-    {key:'cfo_tax',           lbl:'Income tax paid (dentro del FCO)',               calc:false, optional:true},
-    {key:'capex',             lbl:'Acquisitions of PP&E / Capex',                   calc:false},
-    {key:'fcf',               lbl:'Free Cash Flow (calculado: FCO + Capex)',        calc:'auto', display:true, formula:'cfo+capex'},
-    {key:'fcf_rep',           lbl:'FCF Reportado (si lo reportan)',                 calc:false, optional:true},
-    {key:'cff',               lbl:'Net cash flow from financing activities',         calc:false},
-    {key:'interest_paid',     lbl:'Interest paid / Intereses pagados',              calc:false},
-    {key:'interest_received', lbl:'Interest received / Intereses cobrados',         calc:false},
-    {key:'debt_proceeds',     lbl:'Debt proceeds / Toma de préstamos',              calc:false},
-    {key:'debt_repay',        lbl:'Debt repayments / Pago de préstamos',            calc:false},
-    {key:'dividends',         lbl:'Dividends paid / Dividendos pagados',            calc:false, optional:true},
-  ],
-  deuda: [
-    {key:'debt_st',    lbl:'Short-term debt / Deuda CP',                         calc:false},
-    {key:'debt_lt',    lbl:'Long-term debt / Deuda LP',                          calc:false},
-    {key:'total_debt', lbl:'Total Debt (calculado: CP + LP)',                    calc:'auto', editable:true, formula:'debt_st+debt_lt'},
-    {key:'net_debt',   lbl:'Net Debt (calculado: Total Debt - Caja)',            calc:'auto', editable:true, formula:'total_debt-cash_ref'},
-    {key:'net_debt_rep',lbl:'Net Debt Reportado (si lo reportan)',               calc:false, optional:true},
-  ],
-};
-
-
-// Fields that are STOCKS (balance sheet) — Q4 = Annual value
-const STOCK_FIELDS = new Set([
-  'cash','current_assets','non_current_assets','total_assets',
-  'debt_st','current_liab','debt_lt','non_current_liab','total_liab',
-  'equity','net_debt','debt_st','debt_lt','total_debt','net_debt_d'
-]);
-
-// ── Storage helpers ────────────────────────────────────────────────────────────
-function balGetAll()  { try{ return JSON.parse(localStorage.getItem(BAL_STORE)||'{}'); }catch{ return {}; } }
-function balSave(db)  { localStorage.setItem(BAL_STORE, JSON.stringify(db)); }
-function ipcGetAll()  { try{ return JSON.parse(localStorage.getItem(IPC_STORE)||'{}'); }catch{ return {}; } }
-function ipcSave(db)  { localStorage.setItem(IPC_STORE, JSON.stringify(db)); }
-function balKey(co, year, q) { return `${co}||${year}||${q}`; }
-
-// ── IPC helpers ────────────────────────────────────────────────────────────────
-// IPC stored as { '2024-01': 286.4, '2024-02': 296.1, ... }
-function ipcGet(yearMonth) { return ipcGetAll()[yearMonth] || null; }
-
-// Get IPC for last month of a quarter
-function ipcForQ(year, q) {
-  const lastMonth = {Q1:'03', Q2:'06', Q3:'09', Q4:'12'}[q];
-  return ipcGet(`${year}-${lastMonth}`);
-}
-
-// Adjustment factor: value in period A → value in period B
-// factor = IPC_B / IPC_A  → multiply value_A by factor to express in period B prices
-function ipcFactor(yearA, qA, yearB, qB) {
-  const a = ipcForQ(yearA, qA);
-  const b = ipcForQ(yearB, qB);
-  if (!a || !b) return null;
-  return b / a;
-}
-
-// ── Calculate derived fields ───────────────────────────────────────────────────
-function calcDerived(data) {
-  const get = k => (data[k] !== undefined && data[k] !== null && data[k] !== '') ? parseFloat(data[k]) : null;
-  const derived = {...data};
-  // EERR
-  if (get('revenue') !== null && get('costs') !== null && get('gross_profit') === null)
-    derived.gross_profit = get('revenue') + get('costs');
-  if (get('ebit') !== null && get('da') !== null)
-    derived.ebitda_calc = get('ebit') + Math.abs(get('da'));
-  if (get('fin_income') !== null && get('fin_cost') !== null)
-    derived.fin_net = get('fin_income') + get('fin_cost');
-  // Balance
-  if (get('current_assets') !== null && get('non_current_assets') !== null && get('total_assets') === null)
-    derived.total_assets = get('current_assets') + get('non_current_assets');
-  if (get('current_liab') !== null && get('non_current_liab') !== null && get('total_liab') === null)
-    derived.total_liab = get('current_liab') + get('non_current_liab');
-  if (get('debt_st') !== null && get('debt_lt') !== null && get('cash') !== null)
-    derived.net_debt = get('debt_st') + get('debt_lt') - get('cash');
-  // Flujo
-  if (get('cfo') !== null && get('capex') !== null && get('fcf') === null)
-    derived.fcf = get('cfo') + get('capex');
-  // Deuda
-  if (get('debt_st') !== null && get('debt_lt') !== null && get('total_debt') === null)
-    derived.total_debt = get('debt_st') + get('debt_lt');
-  return derived;
-}
-
-// ── Calculate Q4 from Annual - Q1adj - Q2adj - Q3adj ──────────────────────────
-function calcQ4(co, year) {
-  const db = balGetAll();
-  const annual = db[balKey(co, year, 'Q4')] || db[balKey(co, year, 'Anual')];
-  const q1 = db[balKey(co, year, 'Q1')];
-  const q2 = db[balKey(co, year, 'Q2')];
-  const q3 = db[balKey(co, year, 'Q3')];
-  if (!annual || !q1 || !q2 || !q3) return null;
-
-  const f1 = ipcFactor(year, 'Q1', year, 'Q4');
-  const f2 = ipcFactor(year, 'Q2', year, 'Q4');
-  const f3 = ipcFactor(year, 'Q3', year, 'Q4');
-  if (!f1 || !f2 || !f3) return null;
-
-  const result = {};
-  // Only calculate for flow fields (non-stock)
-  Object.keys(annual).forEach(k => {
-    if (k.startsWith('_')) { result[k] = annual[k]; return; }
-    if (STOCK_FIELDS.has(k)) {
-      result[k] = annual[k]; // Stock: Q4 = Annual
-    } else {
-      const a = parseFloat(annual[k]);
-      const v1 = parseFloat(q1[k] || 0) * f1;
-      const v2 = parseFloat(q2[k] || 0) * f2;
-      const v3 = parseFloat(q3[k] || 0) * f3;
-      if (!isNaN(a)) result[k] = a - v1 - v2 - v3;
-    }
-  });
-  return result;
-}
-
-// ── Tree renderer ─────────────────────────────────────────────────────────────
-function renderBalTree() {
-  const db = balGetAll();
-  const tree = document.getElementById('balTree');
-  if (!tree) return;
-  const companies = {};
-  Object.entries(db).forEach(([k,v]) => {
-    const [co,year,q] = k.split('||');
-    if (!companies[co]) companies[co] = {};
-    if (!companies[co][year]) companies[co][year] = [];
-    if (!companies[co][year].find(p=>p.q===q))
-      companies[co][year].push({q, key:k});
-  });
-  if (!Object.keys(companies).length) {
-    tree.innerHTML='<div class="bal-empty-tree">Todavía no hay balances cargados.<br>Usá "Cargar balance" para agregar el primero.</div>';
-    return;
   }
-  const qOrder = {'Q1':1,'Q2':2,'Q3':3,'Q4':4,'Anual':5};
-  tree.innerHTML = Object.keys(companies).sort().map(co => `
-    <div class="tree-item">
-      <div class="tree-co" onclick="toggleTreeCo(this)">
-        <span class="tree-co-icon">▶</span>
-        <span>${co}</span>
-        <span style="margin-left:auto;font-size:10px;color:var(--text3)">${Object.keys(companies[co]).length} año${Object.keys(companies[co]).length>1?'s':''}</span>
-      </div>
-      <div class="tree-years">
-        ${Object.keys(companies[co]).sort().reverse().map(yr => {
-          const periods = companies[co][yr].sort((a,b)=>(qOrder[a.q]||9)-(qOrder[b.q]||9));
-          const hasAnual = periods.some(p=>p.q==='Q4'||p.q==='Anual');
-          return `<div class="tree-year" onclick="toggleTreeYear(this)">
-            <span class="tree-year-icon">▶</span>
-            <span>${yr}</span>
-            ${hasAnual?'<span class="period-badge anual" style="margin-left:auto">Anual</span>':''}
-          </div>
-          <div class="tree-periods">
-            ${periods.map(p=>`
-              <div class="tree-period" onclick="viewBalance('${p.key}')">
-                ${p.q==='Q4'?'Q4 / Anual':p.q}
-              </div>`).join('')}
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`).join('');
-}
 
-function toggleTreeCo(el) { el.classList.toggle('open'); el.nextElementSibling.classList.toggle('open'); }
-function toggleTreeYear(el) { el.classList.toggle('open'); el.nextElementSibling.classList.toggle('open'); }
-function filterBalTree(q) {
-  document.querySelectorAll('.tree-item').forEach(item => {
-    const co = item.querySelector('.tree-co span:nth-child(2)')?.textContent||'';
-    item.style.display = co.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
-  });
-}
+  // ── Table ──────────────────────────────────────────────────────────────────
+  const tableEl = document.getElementById('compTable');
+  if (!tableEl) return;
+  const [tYear, tQ] = (compTablePeriod||'').split('||');
+  const tableEntries = companies.map(co => ({
+    co, entry: db[`${co.name}||${tYear}||${tQ}`] || null
+  }));
 
-// ── View a saved balance ───────────────────────────────────────────────────────
-function viewBalance(key) {
-  const db = balGetAll(); const entry = db[key]; if (!entry) return;
-  const [co,year,q] = key.split('||');
-  const data = calcDerived(entry);
-  const detail = document.getElementById('balDetail');
-  if (!detail) return;
-  detail.style.display = 'block';
-  const fmt = v => (v===null||v===undefined||isNaN(v)) ? '<span style="color:var(--text3)">N/D</span>'
-    : `<span style="font-family:'DM Mono',monospace">${Number(v).toLocaleString('es-AR',{maximumFractionDigits:1})}</span>`;
-  const secs = [
-    {title:'Estado de Resultados', fields:[
-      ['Revenue',data.revenue],['Gross Profit',data.gross_profit],
-      ['EBIT',data.ebit],['D&A',data.da],['EBITDA (calc.)',data.ebitda_calc],
-      ['EBITDA Reportado',data.ebitda_rep],['Adjusted EBITDA',data.adj_ebitda],
-      ['Ing. Financiero',data.fin_income],['Egr. Financiero',data.fin_cost],
-      ['Resultado Fin. Neto',data.fin_net],['Tax',data.tax],['Net Income',data.net_income],
-    ]},
-    {title:'Balance', fields:[
-      ['Caja',data.cash],['Activo Corriente',data.current_assets],
-      ['Activo No Corriente',data.non_current_assets],['Activo Total',data.total_assets],
-      ['Deuda CP',data.debt_st],['Pasivo Corriente',data.current_liab],
-      ['Deuda LP',data.debt_lt],['Pasivo No Corriente',data.non_current_liab],
-      ['Total Pasivo',data.total_liab],['Patrimonio Neto',data.equity],['Deuda Neta',data.net_debt],
-    ]},
-    {title:'Flujo de Efectivo', fields:[
-      ['FCO',data.cfo],['Capex',data.capex],['FCF (calc.)',data.fcf],
-      ['FCF Reportado',data.fcf_rep],['Financiamiento',data.cff],
-      ['Intereses Pagados',data.interest_paid],['Intereses Cobrados',data.interest_received],
-      ['Toma Préstamos',data.debt_proceeds],['Pago Préstamos',data.debt_repay],
-    ]},
+  const fmtM   = v => v===null ? '<span style="color:var(--text3)">—</span>'
+    : `${v<0?'<span style="color:var(--red)">':''}${v.toLocaleString('es-AR',{maximumFractionDigits:0})}M${v<0?'</span>':''}`;
+  const fmtPct = v => v===null ? '<span style="color:var(--text3)">—</span>'
+    : `<span style="color:${v<0?'var(--red)':'var(--green)'}">${v.toFixed(1)}%</span>`;
+  const fmtX   = v => v===null ? '<span style="color:var(--text3)">—</span>' : `${v.toFixed(1)}x`;
+
+  const metrics = [
+    {lbl:'Revenue (USD M)',      key:'revenue',    fmt:fmtM},
+    {lbl:'EBITDA (USD M)',       key:'ebitda',     fmt:fmtM},
+    {lbl:'Adj. EBITDA (USD M)',  key:'adj_ebitda', fmt:fmtM},
+    {lbl:'EBITDA Margin',        key:'ebitda_m',   fmt:fmtPct},
+    {lbl:'Net Income (USD M)',   key:'net_income', fmt:fmtM},
+    {lbl:'Margen Neto %',        key:'net_margin', fmt:fmtPct},
+    {lbl:'Market Cap (USD M)',   key:'mkt_cap',    fmt:fmtM},
+    {lbl:'P/E Ratio',            key:'pe',         fmt:fmtX},
+    {lbl:'EV/EBITDA',            key:'ev_ebitda',  fmt:fmtX},
+    {lbl:'P/BV',                 key:'pbv',        fmt:fmtX},
+    {lbl:'ROE %',                key:'roe',        fmt:fmtPct},
+    {lbl:'Deuda Neta (USD M)',   key:'net_debt',   fmt:fmtM},
+    {lbl:'Deuda Bruta (USD M)',  key:'gross_debt', fmt:fmtM},
+    {lbl:'Deuda Neta/EBITDA',    key:'nd_ebitda',  fmt:fmtX},
+    {lbl:'Equity (USD M)',       key:'equity',     fmt:fmtM},
+    {lbl:'FCO (USD M)',          key:'cfo',        fmt:fmtM},
+    {lbl:'Capex (USD M)',        key:'capex',      fmt:fmtM},
+    {lbl:'FCF (USD M)',          key:'fcf',        fmt:fmtM},
   ];
-  detail.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
-      <div>
-        <div style="font-size:16px;font-weight:600">${co}</div>
-        <div style="font-size:12px;color:var(--text3)">${year} · ${q==='Q4'?'Q4 / Anual':q} · ${entry._moneda||''} ${entry._unidad||''}</div>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button onclick="editBalance('${key}')" style="padding:5px 12px;font-size:11px;background:var(--blue2);border:0.5px solid var(--blue);border-radius:6px;color:var(--blue);cursor:pointer;font-family:'DM Sans',sans-serif">Editar</button>
-        <button onclick="deleteBalance('${key}')" style="padding:5px 12px;font-size:11px;background:var(--red2);border:0.5px solid rgba(214,51,51,0.3);border-radius:6px;color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif">Eliminar</button>
-      </div>
-    </div>
-    ${secs.map(sec=>`
-      <div style="margin-bottom:1.25rem">
-        <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:.5rem">${sec.title}</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
-          ${sec.fields.filter(([,v])=>v!==undefined&&v!==null).map(([lbl,v])=>`
-            <div style="background:var(--bg3);border-radius:var(--radius);padding:.65rem .85rem">
-              <div style="font-size:10px;color:var(--text3);margin-bottom:3px">${lbl}</div>
-              <div style="font-size:14px;font-weight:500">${fmt(v)}</div>
-            </div>`).join('')}
-        </div>
-      </div>`).join('')}
-    <div style="font-size:11px;color:var(--text3);margin-top:.5rem">
-      Cargado: ${new Date(entry._ts||Date.now()).toLocaleDateString('es-AR')}
-      ${entry._moneda==='ARS'?` · ARS ${entry._unidad||''}`:' · USD millones'}
-    </div>`;
-  document.querySelectorAll('.tree-period').forEach(el=>el.classList.remove('selected'));
-  document.querySelectorAll('.tree-period').forEach(el=>{
-    if(el.getAttribute('onclick')?.includes(key)) el.classList.add('selected');
-  });
-}
 
-function deleteBalance(key) {
-  if(!confirm('¿Eliminar este balance?')) return;
-  const db=balGetAll(); delete db[key]; balSave(db);
-  renderBalTree();
-  const d=document.getElementById('balDetail'); if(d) d.style.display='none';
-}
+  // Benchmark as extra column
+  const showBench = compIncludeSector && compSelectedSector && GICS_BENCHMARKS[compSelectedSector];
+  const bench = showBench ? GICS_BENCHMARKS[compSelectedSector] : null;
+  const benchValMap = bench ? {
+    ebitda_m:  bench.ebitda_m   !== undefined ? bench.ebitda_m * 100   : null,
+    net_margin: bench.net_margin !== undefined ? bench.net_margin * 100 : null,
+    nd_ebitda:  bench.nd_ebitda  !== undefined ? bench.nd_ebitda        : null,
+    pe:         bench.pe         !== undefined ? bench.pe               : null,
+    ev_ebitda:  bench.ev_ebitda  !== undefined ? bench.ev_ebitda        : null,
+    pbv:        bench.pbv        !== undefined ? bench.pbv              : null,
+    roe:        bench.roe        !== undefined ? bench.roe * 100        : null,
+  } : {};
 
-function editBalance(key) {
-  const db=balGetAll(); const entry=db[key]; if(!entry) return;
-  const [co,year,q]=key.split('||');
-  switchBalTab('cargar',document.getElementById('btabCargar'));
-  if(!pinUnlocked){ document.getElementById('pinGate').style.display='flex'; return; }
-  // Pre-fill the form with existing data
-  uFormData={...entry}; uEditKey=key;
-  uFormMeta={co, year, q, moneda:entry._moneda||'USD', unidad:entry._unidad||'Millones', cons:entry._cons||'Consolidado'};
-  document.getElementById('pinGate').style.display='none';
-  document.getElementById('uploadForm').style.display='block';
-  renderManualForm();
-}
+  const allCols = [
+    ...tableEntries,
+    ...(showBench ? [{co:{name:`Benchmark\n${compSelectedSector}`, ticker:'BENCH'}, entry:null, isBench:true}] : [])
+  ];
 
-// ── PIN ────────────────────────────────────────────────────────────────────────
-let pinUnlocked=false, uFormData={}, uFormMeta={}, uEditKey=null;
-function checkPin(val) {
-  if(val.length<BAL_PIN.length) return;
-  if(val===BAL_PIN) {
-    pinUnlocked=true;
-    document.getElementById('pinGate').style.display='none';
-    document.getElementById('uploadForm').style.display='block';
-    uFormData={}; uFormMeta={}; uEditKey=null;
-    renderManualForm();
-  } else {
-    document.getElementById('pinError').style.display='block';
-    document.getElementById('pinInput').value='';
-    setTimeout(()=>document.getElementById('pinError').style.display='none',2000);
-  }
-}
-
-// ── IPC TABLE ─────────────────────────────────────────────────────────────────
-function renderIPCTable() {
-  const ipc = ipcGetAll();
-  const currentYear = new Date().getFullYear();
-  const years = [currentYear, currentYear-1, currentYear-2, currentYear-3];
-  const months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
-  const mNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-
-  const cont = document.getElementById('balTabIPC');
-  if(!cont) return;
-  cont.innerHTML = `
-    <div style="font-size:12px;color:var(--text3);margin-bottom:1rem;line-height:1.7">
-      Ingresá el <strong style="color:var(--text)">número índice IPC</strong> del INDEC (no la variación %).
-      Se usa para ajustar valores de flujo entre trimestres.<br>
-      Fuente: <a href="https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-5-31" target="_blank" style="color:var(--blue)">INDEC · IPC Nacional</a>
-    </div>
-    <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:12px">
+  const colW = `${Math.floor(80/allCols.length)}%`;
+  tableEl.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:.5rem">
       <thead><tr>
-        <th style="text-align:left;padding:6px 10px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:10px">Año</th>
-        ${mNames.map(m=>`<th style="padding:6px 8px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:10px;text-align:center">${m}</th>`).join('')}
+        <th style="text-align:left;padding:7px 12px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:11px;width:20%">Métrica</th>
+        ${allCols.map((d,i)=>`
+          <th style="text-align:right;padding:7px 12px;border-bottom:0.5px solid var(--border);
+              color:${d.isBench ? 'var(--amber)' : COMP_COLORS[i]};font-size:11px;width:${colW}">
+            ${d.isBench ? `Benchmark<br><span style="font-size:10px;font-weight:400;color:var(--amber)">${compSelectedSector}</span>`
+              : `${d.co.name}<br><span style="font-size:10px;color:var(--text3);font-weight:400">${compTablePeriod ? periodLabel(compTablePeriod) : '—'}</span>`}
+          </th>`).join('')}
       </tr></thead>
       <tbody>
-        ${years.map(yr=>`
-          <tr>
-            <td style="padding:6px 10px;font-weight:500;color:var(--text);font-size:12px">${yr}</td>
-            ${months.map(mo=>{
-              const key=`${yr}-${mo}`;
-              const val=ipc[key]||'';
-              return `<td style="padding:4px 4px;text-align:center">
-                <input type="number" step="0.01" value="${val}"
-                  style="width:68px;padding:3px 5px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;text-align:right;outline:none"
-                  onchange="saveIPC('${key}',this.value)"
-                  onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border2)'">
+        ${metrics.map((m,mi)=>`
+          <tr style="background:${mi%2===0?'transparent':'var(--bg3)'}">
+            <td style="padding:7px 12px;color:var(--text3)">${m.lbl}</td>
+            ${allCols.map(d => {
+              if (d.isBench) {
+                const bv = benchValMap[m.key] ?? null;
+                return `<td style="padding:7px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--amber)">
+                  ${bv !== null ? m.fmt(bv) : '<span style="color:var(--text3)">N/A</span>'}
+                </td>`;
+              }
+              return `<td style="padding:7px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:12px;color:var(--text)">
+                ${m.fmt(getMetricValue(d.entry, m.key))}
               </td>`;
             }).join('')}
           </tr>`).join('')}
       </tbody>
-    </table>
-    </div>
-    <div style="margin-top:.75rem;font-size:11px;color:var(--text3)">
-      Los valores se guardan automáticamente al salir de cada celda.
-    </div>`;
+    </table>`;
 }
-
-function saveIPC(key, val) {
-  const db = ipcGetAll();
-  const n = parseFloat(val);
-  if(!isNaN(n) && n>0) { db[key]=n; ipcSave(db); }
-  else if(val===''||val==='0') { delete db[key]; ipcSave(db); }
-}
-
-// ── MANUAL FORM ───────────────────────────────────────────────────────────────
-function renderManualForm() {
-  const cont = document.getElementById('uploadForm');
-  if(!cont) return;
-
-  const companies_list = [...new Set([
-    ...COMPANIES.map(c=>c.name),
-    'YPF S.A.','Vista Energy','Pampa Energía','TGS','Edenor',
-    'Pluspetrol','Tecpetrol','PAE','MSU Energy','CGC',
-    'Albanesi','Genneia','Clisa','Telecom Argentina',
-  ])];
-
-  const meta = uFormMeta;
-  const data = uFormData;
-
-  cont.innerHTML = `
-    <div style="margin-bottom:1.25rem">
-      <div style="font-size:13px;font-weight:500;margin-bottom:.75rem;color:var(--text)">
-        ${uEditKey ? '✏ Editar balance' : '+ Cargar nuevo balance'}
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:1rem">
-        <div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Empresa</div>
-          <select id="fmEmpresa" class="fselect" style="width:100%" onchange="handleCoChange(this)">
-            ${companies_list.map(n=>`<option ${meta.co===n?'selected':''}>${n}</option>`).join('')}
-            <option value="__new__" ${!meta.co?'selected':''}>+ Nueva empresa...</option>
-          </select>
-        </div>
-        <div id="fmNewCoWrap" style="display:${!meta.co||meta.co==='__new__'?'block':'none'}">
-          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Nombre empresa</div>
-          <input id="fmNewCo" placeholder="Ej: Pluspetrol S.A."
-            style="width:100%;padding:6px 10px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius);color:var(--text);font-size:12px;outline:none"
-            value="${meta.newCo||''}">
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Año fiscal</div>
-          <select id="fmAnio" class="fselect" style="width:100%">
-            ${Array.from({length:8},(_,i)=>new Date().getFullYear()-i).map(y=>`<option ${meta.year==y?'selected':''}>${y}</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Período</div>
-          <select id="fmPeriodo" class="fselect" style="width:100%">
-            ${['Q1','Q2','Q3','Q4','Anual'].map(q=>`<option ${meta.q===q?'selected':''}>${q}</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Moneda</div>
-          <select id="fmMoneda" class="fselect" style="width:100%">
-            <option ${meta.moneda==='USD'?'selected':''}>USD</option>
-            <option ${meta.moneda==='ARS'?'selected':''}>ARS</option>
-          </select>
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Unidad</div>
-          <select id="fmUnidad" class="fselect" style="width:100%">
-            <option ${meta.unidad==='Millones'?'selected':''}>Millones</option>
-            <option ${meta.unidad==='Miles'?'selected':''}>Miles</option>
-            <option ${meta.unidad==='Unidades'?'selected':''}>Unidades</option>
-          </select>
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Tipo</div>
-          <select id="fmCons" class="fselect" style="width:100%">
-            <option ${meta.cons==='Consolidado'?'selected':''}>Consolidado</option>
-            <option ${meta.cons==='Individual'?'selected':''}>Individual</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="fmQ4Warning" style="display:none;padding:8px 12px;background:var(--amber2);border-radius:6px;font-size:12px;color:var(--amber);margin-bottom:.75rem">
-        ⚠ Para Q4 los campos de flujo se calculan automáticamente si están cargados Q1, Q2 y Q3 con el IPC correspondiente.
-        Si no están cargados, podés ingresar los valores manualmente igual.
-      </div>
-    </div>
-
-    <div class="mtabs" id="fmTabs">
-      ${['eerr','balance','flujo','deuda'].map((s,i)=>
-        `<div class="mtab ${i===0?'active':''}" onclick="switchFmTab('${s}',this)">${
-          {eerr:'Estado de Resultados',balance:'Balance',flujo:'Flujo de Efectivo',deuda:'Deuda'}[s]
-        }</div>`).join('')}
-    </div>
-
-    <div id="fmFields" style="max-height:380px;overflow-y:auto;margin-bottom:1rem"></div>
-
-    <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap">
-      <button class="gb" onclick="resetBalForm()">Cancelar</button>
-      <div style="display:flex;gap:8px">
-        <button class="gb" onclick="switchFmTabByIdx(-1)">← Anterior</button>
-        <button class="gb" onclick="switchFmTabByIdx(1)">Siguiente →</button>
-        <button class="gb gb-primary" onclick="saveManualBalance()">Guardar balance ✓</button>
-      </div>
-    </div>`;
-
-  fmCurrentSection = 'eerr';
-  renderFmFields('eerr');
-  updateQ4Warning();
-}
-
-let fmCurrentSection = 'eerr';
-const fmSections = ['eerr','balance','flujo','deuda'];
-
-function handleCoChange(el) {
-  document.getElementById('fmNewCoWrap').style.display = el.value==='__new__'?'block':'none';
-}
-
-function updateQ4Warning() {
-  const periodo = document.getElementById('fmPeriodo')?.value;
-  const w = document.getElementById('fmQ4Warning');
-  if(w) w.style.display = (periodo==='Q4'||periodo==='Anual') ? 'none' : 'none';
-}
-
-function switchFmTab(sec, el) {
-  fmCurrentSection = sec;
-  document.querySelectorAll('#fmTabs .mtab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
-  renderFmFields(sec);
-}
-
-function switchFmTabByIdx(dir) {
-  const idx = fmSections.indexOf(fmCurrentSection);
-  const next = fmSections[Math.max(0, Math.min(fmSections.length-1, idx+dir))];
-  const tabs = document.querySelectorAll('#fmTabs .mtab');
-  fmCurrentSection = next;
-  tabs.forEach((t,i) => t.classList.toggle('active', fmSections[i]===next));
-  renderFmFields(next);
-}
-
-function renderFmFields(sec) {
-  const fields = BAL_FIELDS[sec];
-  const data   = uFormData;
-  const cont   = document.getElementById('fmFields');
-  if(!cont) return;
-
-  cont.innerHTML = fields.map(f => {
-    const isAutoOnly  = f.calc==='auto' && !f.editable;   // shown, not editable
-    const isAutoEdit  = f.calc==='auto' && f.editable;    // pre-filled but editable
-    const isOptional  = f.optional;
-    const calcVal     = (f.calc==='auto') ? computeCalcField(f, data) : null;
-    const overrideVal = data['_override_'+f.key];
-    const displayVal  = overrideVal !== undefined ? overrideVal : (data[f.key] !== undefined ? data[f.key] : '');
-
-    // Auto-only: show as green read-only display
-    if (isAutoOnly) {
-      return `<div class="frow" style="background:var(--bg3);border-radius:5px;padding:6px 10px">
-        <span class="flabel" style="color:var(--text3);font-size:11px">${f.lbl}</span>
-        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--green)" id="calc_${f.key}">
-          ${calcVal !== null ? Number(calcVal).toLocaleString('es-AR',{maximumFractionDigits:1}) : '<span style="color:var(--text3);font-size:11px">completá campos</span>'}
-        </span>
-      </div>`;
-    }
-
-    // Auto-editable: pre-filled input that user can override
-    if (isAutoEdit) {
-      const showVal = overrideVal !== undefined ? overrideVal : (calcVal !== null ? calcVal : '');
-      return `<div class="frow">
-        <span class="flabel">${f.lbl}
-          <span style="font-size:10px;color:var(--green);margin-left:4px" id="calcbadge_${f.key}">${overrideVal!==undefined?'(editado)':'(auto)'}</span>
-        </span>
-        <div style="display:flex;align-items:center;gap:6px">
-          <input type="number" step="any" id="fi_${f.key}" value="${showVal}"
-            style="width:150px;padding:5px 9px;background:var(--bg3);border:0.5px solid var(--green);border-radius:5px;
-                   color:var(--text);font-family:'DM Mono',monospace;font-size:12px;text-align:right;outline:none"
-            oninput="overrideCalcField('${f.key}',this.value)"
-            onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--green)'">
-          <button onclick="resetCalcField('${f.key}')" title="Restaurar calculado"
-            style="padding:3px 7px;font-size:10px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;color:var(--text3);cursor:pointer">↺</button>
-        </div>
-      </div>`;
-    }
-
-    // Normal input
-    return `<div class="frow">
-      <span class="flabel">${f.lbl}${isOptional?' <span style="font-size:10px;color:var(--text3)">(opcional)</span>':''}</span>
-      <input type="number" step="any" id="fi_${f.key}" value="${displayVal}" placeholder="N/D"
-        style="width:160px;padding:5px 9px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:5px;
-               color:var(--text);font-family:'DM Mono',monospace;font-size:12px;text-align:right;outline:none"
-        oninput="updateFormField('${f.key}',this.value)"
-        onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border2)'">
-    </div>`;
-  }).join('');
-
-  // Balance validation banner
-  if (sec==='balance') {
-    cont.innerHTML += `<div id="balValidation" style="margin-top:.75rem;padding:8px 12px;border-radius:6px;font-size:12px;display:none"></div>`;
-    validateBalance();
-  }
-}
-
-function overrideCalcField(key, val) {
-  const n = parseFloat(val);
-  if (!isNaN(n)) {
-    uFormData['_override_'+key] = n;
-  } else {
-    delete uFormData['_override_'+key];
-  }
-  const badge = document.getElementById('calcbadge_'+key);
-  if (badge) badge.textContent = '(editado)';
-  updateAllCalcDisplays();
-}
-
-function resetCalcField(key) {
-  delete uFormData['_override_'+key];
-  // Re-compute and fill the input
-  const f = Object.values(BAL_FIELDS).flat().find(f=>f.key===key);
-  if (!f) return;
-  const calc = computeCalcField(f, uFormData);
-  const inp = document.getElementById('fi_'+key);
-  if (inp && calc !== null) inp.value = calc;
-  const badge = document.getElementById('calcbadge_'+key);
-  if (badge) badge.textContent = '(auto)';
-  updateAllCalcDisplays();
-}
-
-function validateBalance() {
-  const banner = document.getElementById('balValidation');
-  if (!banner) return;
-  const get = k => { const v = uFormData[k]; return (v!==undefined&&v!==null&&v!=='') ? parseFloat(v) : null; };
-  const ca  = get('current_assets'), nca = get('non_current_assets');
-  const cl  = get('current_liab'),   ncl = get('non_current_liab');
-  const eq  = get('equity');
-  if (ca===null||nca===null||cl===null||ncl===null||eq===null) {
-    banner.style.display='none'; return;
-  }
-  const totalA = ca + nca;
-  const totalP = cl + ncl + eq;
-  const diff = Math.abs(totalA - totalP);
-  const pct  = diff / totalA;
-  if (pct < 0.001) {  // <0.1% tolerance for rounding
-    banner.style.display='block';
-    banner.style.background='var(--green2)';
-    banner.style.color='var(--green)';
-    banner.innerHTML=`✓ Balance cuadra: Activo Total = ${totalA.toLocaleString('es-AR',{maximumFractionDigits:0})} = Pasivo + PN`;
-  } else {
-    banner.style.display='block';
-    banner.style.background='var(--red2)';
-    banner.style.color='var(--red)';
-    banner.innerHTML=`✗ Balance no cuadra: Activo (${totalA.toLocaleString('es-AR',{maximumFractionDigits:0})}) ≠ Pasivo + PN (${totalP.toLocaleString('es-AR',{maximumFractionDigits:0})}). Diferencia: ${diff.toLocaleString('es-AR',{maximumFractionDigits:0})}`;
-  }
-}
-
-function computeCalcField(f, data) {
-  const get = k => {
-    const v = data[k];
-    return (v!==undefined && v!==null && v!=='') ? parseFloat(v) : null;
-  };
-  const abs = v => v !== null ? Math.abs(v) : null;
-
-  // If user has manually overridden this field, respect it
-  if (f.editable && data['_override_'+f.key] !== undefined) return data['_override_'+f.key];
-
-  if (f.key==='gross_profit') {
-    const r=get('revenue'), co=get('costs');
-    return (r!==null&&co!==null) ? r+co : null;
-  }
-  if (f.key==='ebitda_calc') {
-    const ebit=get('ebit'), da=get('da');
-    return (ebit!==null&&da!==null) ? ebit+Math.abs(da) : null;
-  }
-  if (f.key==='fin_net') {
-    const i=get('fin_income'), co=get('fin_cost');
-    return (i!==null&&co!==null) ? i+co : null;
-  }
-  if (f.key==='fcf') {
-    const o=get('cfo'), x=get('capex');
-    return (o!==null&&x!==null) ? o+x : null;
-  }
-  if (f.key==='total_debt') {
-    const s=get('debt_st'), l=get('debt_lt');
-    return (s!==null&&l!==null) ? s+l : null;
-  }
-  if (f.key==='net_debt') {
-    // Use balance cash if available, else deuda section cash
-    const td=get('total_debt') ?? computeCalcField({key:'total_debt'}, data);
-    const cash=get('cash');
-    return (td!==null&&cash!==null) ? td-cash : null;
-  }
-  return null;
-}
-
-function updateFormField(key, val) {
-  uFormData[key] = (val===''||val===null) ? null : parseFloat(val);
-  updateAllCalcDisplays();
-  if (fmCurrentSection==='balance') validateBalance();
-}
-
-function updateAllCalcDisplays() {
-  const sec = fmCurrentSection;
-  BAL_FIELDS[sec]?.forEach(f => {
-    if (f.calc==='auto') {
-      const v = computeCalcField(f, uFormData);
-      // Update read-only display
-      const dispEl = document.getElementById('calc_'+f.key);
-      if (dispEl) dispEl.innerHTML = v!==null
-        ? Number(v).toLocaleString('es-AR',{maximumFractionDigits:1})
-        : '<span style="color:var(--text3);font-size:11px">completá campos</span>';
-      // Update editable input if not overridden
-      if (f.editable && uFormData['_override_'+f.key]===undefined) {
-        const inp = document.getElementById('fi_'+f.key);
-        if (inp && v!==null) inp.value = v;
-      }
-    }
-  });
-}
-
-function saveManualBalance() {
-  const coEl   = document.getElementById('fmEmpresa');
-  const co     = coEl?.value==='__new__'
-    ? (document.getElementById('fmNewCo')?.value||'Nueva empresa').trim()
-    : coEl?.value;
-  const year   = document.getElementById('fmAnio')?.value;
-  const q      = document.getElementById('fmPeriodo')?.value;
-  const moneda = document.getElementById('fmMoneda')?.value;
-  const unidad = document.getElementById('fmUnidad')?.value;
-  const cons   = document.getElementById('fmCons')?.value;
-
-  if(!co || !year || !q) { alert('Completá empresa, año y período'); return; }
-
-  // Balance validation: block if doesn't square
-  const _get = k => { const v=uFormData[k]; return (v!==undefined&&v!==null&&v!=='') ? parseFloat(v) : null; };
-  const _ca=_get('current_assets'), _nca=_get('non_current_assets');
-  const _cl=_get('current_liab'), _ncl=_get('non_current_liab'), _eq=_get('equity');
-  if (_ca!==null && _nca!==null && _cl!==null && _ncl!==null && _eq!==null) {
-    const _totalA = _ca+_nca, _totalP = _cl+_ncl+_eq;
-    if (Math.abs(_totalA-_totalP)/_totalA > 0.001) {
-      if (!confirm(`⚠ El balance no cuadra (diferencia: ${Math.abs(_totalA-_totalP).toLocaleString('es-AR',{maximumFractionDigits:0})}).\n¿Guardar de todas formas?`)) return;
-    }
-  }
-
-  const key = balKey(co, year, q);
-  const db  = balGetAll();
-  if(db[key] && !uEditKey && !confirm(`Ya existe un balance para ${co} ${year} ${q}. ¿Reemplazar?`)) return;
-
-  // Merge calculated fields
-  const finalData = calcDerived({...uFormData, _moneda:moneda, _unidad:unidad, _cons:cons, _ts:Date.now()});
-  db[key] = finalData;
-  balSave(db);
-
-  // If saving Annual/Q4, also sync stock fields to Q4
-  if(q==='Anual') {
-    const q4key = balKey(co, year, 'Q4');
-    if(!db[q4key]) {
-      const q4data = {...finalData};
-      // Stock fields: Q4 = Annual value (already equal)
-      db[q4key] = {...q4data, _ts:Date.now()};
-      balSave(db);
-    }
-  }
-
-  renderBalTree();
-  document.getElementById('uploadForm').innerHTML=`
-    <div style="text-align:center;padding:2.5rem;color:var(--green)">
-      <div style="font-size:32px;margin-bottom:10px;opacity:0.6">✓</div>
-      <div style="font-size:14px;font-weight:500;margin-bottom:6px">Balance guardado</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:1.5rem">${co} · ${year} · ${q}</div>
-      <div style="display:flex;gap:8px;justify-content:center">
-        <button class="gb gb-primary" onclick="resetBalForm()">Cargar otro →</button>
-        <button class="gb" onclick="switchBalTab('ver',document.getElementById('btabVer'))">Ver balances</button>
-      </div>
-    </div>`;
-  uEditKey = null;
-}
-
-function resetBalForm() {
-  uFormData={}; uFormMeta={}; uEditKey=null;
-  document.getElementById('uploadForm').style.display='block';
-  renderManualForm();
-
-// ── Tab switcher ───────────────────────────────────────────────────────────────
-function switchBalTab(tab, el) {
-  document.querySelectorAll('.bal-tab').forEach(t=>t.classList.remove('active'));
-  if(el) el.classList.add('active');
-  ['balTabVer','balTabCargar','balTabIPC'].forEach(id=>{
-    const e=document.getElementById(id); if(e) e.style.display='none';
-  });
-  const target = {ver:'balTabVer', cargar:'balTabCargar', ipc:'balTabIPC'}[tab];
-  const targetEl = document.getElementById(target);
-  if(targetEl) targetEl.style.display='';
-  if(tab==='ipc') renderIPCTable();
-  if(tab==='cargar' && !pinUnlocked) {
-    document.getElementById('pinGate').style.display='flex';
-    document.getElementById('uploadForm').style.display='none';
-  }
-}
-ormData={}; uFormMeta={}; uEditKey=null;
-  document.getElementById('uploadForm').style.display='block';
-  renderManualForm();
-}
-
-// ── Tab switcher ───────────────────────────────────────────────────────────────
-
 
 
 </script>
