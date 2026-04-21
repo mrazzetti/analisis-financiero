@@ -658,23 +658,27 @@ body.dark {
 
 <script>function updateAllCalcDisplays() {
   const sec = fmCurrentSection;
-  BAL_FIELDS[sec]?.forEach(f => {
-    if (f.calc === 'auto' || (f.calc && f.display)) {
-      const v = computeCalcField(f, uFormData);
-      // Update read-only display
-      const dispEl = document.getElementById('calc_'+f.key);
-      if (dispEl) dispEl.innerHTML = v!==null
-        ? Number(v).toLocaleString('es-AR',{maximumFractionDigits:1})
-        : '<span style="color:var(--text3);font-size:11px">completá campos</span>';
-      // Update editable input if not overridden by user
-      if (f.editable && uFormData['_override_'+f.key]===undefined) {
-        const inp = document.getElementById('fi_'+f.key);
-        if (inp && v!==null) inp.value = v;
+  // Always update current section; also update deuda if cash changed
+  const toUpdate = new Set([sec]);
+  if (sec === 'balance') toUpdate.add('deuda');
+  toUpdate.forEach(s => {
+    BAL_FIELDS[s]?.forEach(f => {
+      if (f.calc === 'auto' || (f.calc && f.display)) {
+        const v = computeCalcField(f, uFormData);
+        const dispEl = document.getElementById('calc_'+f.key);
+        if (dispEl) dispEl.innerHTML = v!==null
+          ? Number(v).toLocaleString('es-AR',{maximumFractionDigits:1})
+          : '<span style="color:var(--text3);font-size:11px">completá campos</span>';
+        if (f.editable && uFormData['_override_'+f.key]===undefined) {
+          const inp = document.getElementById('fi_'+f.key);
+          if (inp && v!==null) inp.value = v;
+        }
       }
-    }
+    });
   });
   if (fmCurrentSection==='balance') validateBalance();
 }
+
 function validateBalance() {
   const banner = document.getElementById('balValidation');
   if (!banner) return;
@@ -990,7 +994,7 @@ const BAL_FIELDS = {
     {key:'current_liab',       lbl:'Total Current Liabilities / Pasivo corriente',   calc:false},
     {key:'debt_lt',            lbl:'Long-term debt / Deuda financiera LP',           calc:false},
     {key:'non_current_liab',   lbl:'Total Non-current Liabilities / Pasivo no corriente', calc:false},
-    {key:'total_liab',         lbl:'Total Pasivo (calculado)',                        calc:'auto', editable:true, formula:'current_liab+non_current_liab'},
+    {key:'total_liab',         lbl:'Pasivo Total (calculado)',                        calc:'auto', editable:true, formula:'current_liab+non_current_liab'},
     {key:'equity',             lbl:"Patrimonio Neto",                               calc:false},
   ],
   flujo: [
@@ -1485,6 +1489,7 @@ function renderManualForm() {
 
   fmCurrentSection = 'eerr';
   renderFmFields('eerr');
+  updateAllCalcDisplays();
   updateQ4Warning();
 }
 
@@ -1506,6 +1511,7 @@ function switchFmTab(sec, el) {
   document.querySelectorAll('#fmTabs .mtab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
   renderFmFields(sec);
+  updateAllCalcDisplays();
 }
 
 function switchFmTabByIdx(dir) {
@@ -1515,6 +1521,7 @@ function switchFmTabByIdx(dir) {
   fmCurrentSection = next;
   tabs.forEach((t,i) => t.classList.toggle('active', fmSections[i]===next));
   renderFmFields(next);
+  updateAllCalcDisplays();
 }
 
 function renderFmFields(sec) {
@@ -1609,17 +1616,7 @@ function computeCalcField(f, data) {
 
 function updateFormField(key, val) {
   uFormData[key] = (val===''||val===null) ? null : parseFloat(val);
-  // Update all visible calc fields
-  const sec = fmCurrentSection;
-  BAL_FIELDS[sec]?.forEach(f => {
-    if(f.calc && f.display) {
-      const el = document.getElementById('calc_'+f.key);
-      if(el) {
-        const v = computeCalcField(f, uFormData);
-        el.textContent = v!==null ? Number(v).toLocaleString('es-AR',{maximumFractionDigits:1}) : 'Completá los campos necesarios';
-      }
-    }
-  });
+  updateAllCalcDisplays();
 }
 
 function saveManualBalance() {
