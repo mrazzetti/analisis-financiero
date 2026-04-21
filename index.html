@@ -658,20 +658,28 @@ body.dark {
 
 <script>function updateAllCalcDisplays() {
   const sec = fmCurrentSection;
-  // Always update current section; also update deuda if cash changed
   const toUpdate = new Set([sec]);
   if (sec === 'balance') toUpdate.add('deuda');
   toUpdate.forEach(s => {
     BAL_FIELDS[s]?.forEach(f => {
       if (f.calc === 'auto' || (f.calc && f.display)) {
         const v = computeCalcField(f, uFormData);
+        // Update read-only display
         const dispEl = document.getElementById('calc_'+f.key);
         if (dispEl) dispEl.innerHTML = v!==null
           ? Number(v).toLocaleString('es-AR',{maximumFractionDigits:1})
           : '<span style="color:var(--text3);font-size:11px">completá campos</span>';
+        // Update editable auto-calc input (only if user hasn't overridden)
         if (f.editable && uFormData['_override_'+f.key]===undefined) {
           const inp = document.getElementById('fi_'+f.key);
-          if (inp && v!==null) inp.value = v;
+          if (inp) {
+            if (v!==null) {
+              inp.value = Number(v).toFixed(1).replace(/\.0$/, '');
+              uFormData[f.key] = v; // keep uFormData in sync
+            } else {
+              inp.value = '';
+            }
+          }
         }
       }
     });
@@ -1612,6 +1620,28 @@ function computeCalcField(f, data) {
     return (td!==null&&cash!==null)?td-cash:null;
   }
   return null;
+}
+
+function overrideCalcField(key, val) {
+  if (val===''||val===null||val==='') {
+    delete uFormData['_override_'+key];
+  } else {
+    uFormData['_override_'+key] = parseFloat(val);
+  }
+  const badge = document.getElementById('calcbadge_'+key);
+  if (badge) badge.textContent = uFormData['_override_'+key]!==undefined ? '(editado)' : '(auto)';
+  updateAllCalcDisplays();
+}
+
+function resetCalcField(key) {
+  delete uFormData['_override_'+key];
+  const f = BAL_FIELDS[fmCurrentSection]?.find(f=>f.key===key);
+  const v = f ? computeCalcField(f, uFormData) : null;
+  const inp = document.getElementById('fi_'+key);
+  if (inp && v!==null) inp.value = v;
+  const badge = document.getElementById('calcbadge_'+key);
+  if (badge) badge.textContent = '(auto)';
+  updateAllCalcDisplays();
 }
 
 function updateFormField(key, val) {
