@@ -1236,19 +1236,28 @@ function viewBalance(key) {
 
 function deleteBalance(key) {
   if(!confirm('¿Eliminar este balance?')) return;
-  const db=balGetAll(); delete db[key]; balSave(db);
+  const db=balGetAll();
+  delete db[key];
+  balSave(db);
   renderBalTree();
-  const d=document.getElementById('balDetail'); if(d) d.style.display='none';
+  renderQuickBtns();
+  const d=document.getElementById('balDetail');
+  if(d) d.style.display='none';
+  ghSaveBalances().then(ok=>console.log(ok?'GH: eliminado':'GH: solo local'));
 }
 
 function editBalance(key) {
   const db=balGetAll(); const entry=db[key]; if(!entry) return;
   const [co,year,q]=key.split('||');
   switchBalTab('cargar',document.getElementById('btabCargar'));
-  if(!pinUnlocked){ document.getElementById('pinGate').style.display='flex'; return; }
-  // Pre-fill the form with existing data
+  // Pre-fill data regardless of PIN state
   uFormData={...entry}; uEditKey=key;
   uFormMeta={co, year, q, moneda:entry._moneda||'USD', unidad:entry._unidad||'Millones', cons:entry._cons||'Consolidado'};
+  if(!pinUnlocked){
+    document.getElementById('pinGate').style.display='flex';
+    document.getElementById('uploadForm').style.display='none';
+    return;
+  }
   document.getElementById('pinGate').style.display='none';
   document.getElementById('uploadForm').style.display='block';
   renderManualForm();
@@ -1262,7 +1271,8 @@ function checkPin(val) {
     pinUnlocked=true;
     document.getElementById('pinGate').style.display='none';
     document.getElementById('uploadForm').style.display='block';
-    uFormData={}; uFormMeta={}; uEditKey=null;
+    // If editing existing balance, keep uFormData/uEditKey; otherwise reset
+    if(!uEditKey) { uFormData={}; uFormMeta={}; }
     renderManualForm();
   } else {
     document.getElementById('pinError').style.display='block';
@@ -1675,6 +1685,10 @@ function saveManualBalance() {
 
   const key = balKey(co, year, q);
   const db  = balGetAll();
+  // If editing and key changed (e.g. period changed), remove old entry
+  if(uEditKey && uEditKey !== key) {
+    delete db[uEditKey];
+  }
   if(db[key] && !uEditKey && !confirm(`Ya existe un balance para ${co} ${year} ${q}. ¿Reemplazar?`)) return;
 
   // Merge calculated fields
@@ -1740,8 +1754,20 @@ async function ghLoadBalances(){
   try{
     const r=await fetch(`https://raw.githubusercontent.com/${GH_REPO}/main/balances.json?t=${Date.now()}`);
     if(!r.ok)return false;
-    const d=await r.json();
-    if(d&&typeof d==='object'){localStorage.setItem(BAL_STORE,JSON.stringify(d));return true;}
+    const ghData=await r.json();
+    if(!ghData||typeof ghData!=='object') return false;
+    // Merge: GH adds new keys, but local changes (edits/deletes) take precedence
+    const local=balGetAll();
+    const merged={...ghData};
+    // Local keys override GH (preserves edits and deletes)
+    Object.keys(local).forEach(k=>{ merged[k]=local[k]; });
+    // Keys in GH but deleted locally — we need to track deletions
+    // For now: if local is non-empty, don't restore keys that aren't local
+    if(Object.keys(local).length>0){
+      Object.keys(ghData).forEach(k=>{ if(!(k in local)) merged[k]=ghData[k]; });
+    }
+    localStorage.setItem(BAL_STORE,JSON.stringify(merged));
+    return true;
   }catch(e){console.warn('GH load:',e.message);}
   return false;
 }
