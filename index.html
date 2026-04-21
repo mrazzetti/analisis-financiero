@@ -558,10 +558,9 @@ body.dark {
             <input class="pin-input" id="pinInput" type="password" maxlength="6" placeholder="••••••" oninput="checkPin(this.value)">
             <div class="pin-error" id="pinError">PIN incorrecto</div>
             <div style="margin-top:1rem;width:100%;max-width:280px;text-align:left">
-              <div style="font-size:11px;color:var(--text3);margin-bottom:4px">GitHub Token (para sincronizar con todos)</div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:4px">GitHub Token</div>
               <input id="ghTokenInput" type="password" placeholder="ghp_..."
-                style="width:100%;padding:7px 10px;background:var(--bg3);border:0.5px solid var(--border2);
-                       border-radius:6px;color:var(--text);font-size:12px;outline:none"
+                style="width:100%;padding:7px 10px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;outline:none"
                 oninput="saveGhToken(this.value)">
               <div style="font-size:10px;color:var(--text3);margin-top:3px">Solo se guarda en tu browser</div>
             </div>
@@ -635,7 +634,29 @@ body.dark {
       <div class="tab" onclick="swTab('bs',this)">Balance Sheet</div>
       <div class="tab" onclick="swTab('cf',this)">Cash Flow</div>
       <div class="tab" onclick="swTab('rt',this)">Ratios</div>
-      <div class="tab" onclick="swTab('
+      <div class="tab" onclick="swTab('dcf',this)">DCF</div>
+      <div class="tab" onclick="swTab('ons',this)">ONs / Deuda</div>
+      <div class="tab" onclick="swTab('cache',this)">Base de datos</div>
+    </div>
+
+    <div class="section active" id="ov"></div>
+    <div class="section" id="is"></div>
+    <div class="section" id="bs"></div>
+    <div class="section" id="cf"></div>
+    <div class="section" id="rt"></div>
+    <div class="section" id="dcf"></div>
+    <div class="section" id="ons"></div>
+    <div class="section" id="cache"></div>
+  </div>
+</div>
+</div><!-- /analysis-view -->
+
+<!-- COMPARADOR -->
+<div class="comp-view" id="comparatorView">
+  <div id="compContent"></div>
+</div>
+
+<script>
 // ── CONFIG ────────────────────────────
 // ── CONFIG ────────────────────────────────────────────────────────────────
 // ── CONFIG ────────────────────────────
@@ -898,9 +919,9 @@ async function avFetch(fn, params) {
 const BAL_PIN      = '1234';
 const BAL_STORE    = 'arg_balances_v2';
 const IPC_STORE    = 'arg_ipc_v1';
-const GH_REPO      = 'mrazzetti/analisis-financiero';
-const GH_FILE      = 'balances.json';
-const GH_TOKEN_KEY = 'arg_gh_token';
+const GH_REPO='mrazzetti/analisis-financiero';
+const GH_FILE='balances.json';
+const GH_TOKEN_KEY='arg_gh_token';
 
 // ── Field definitions ─────────────────────────────────────────────────────────
 const BAL_FIELDS = {
@@ -1579,7 +1600,7 @@ function saveManualBalance() {
 
   renderBalTree();
   renderQuickBtns();
-  ghSaveBalances().then(ok => console.log(ok ? 'GitHub: ok' : 'GitHub: solo local'));
+  ghSaveBalances().then(ok=>console.log(ok?'GH:ok':'GH:local'));
   document.getElementById('uploadForm').innerHTML=`
     <div style="text-align:center;padding:2.5rem;color:var(--green)">
       <div style="font-size:32px;margin-bottom:10px;opacity:0.6">✓</div>
@@ -1613,50 +1634,36 @@ function switchBalTab(tab, el) {
   if(tab==='cargar' && !pinUnlocked) {
     document.getElementById('pinGate').style.display='flex';
     document.getElementById('uploadForm').style.display='none';
-    const ti=document.getElementById('ghTokenInput'); if(ti) ti.value=ghToken();
+    const _t=document.getElementById('ghTokenInput');if(_t)_t.value=ghToken();
   }
 }
 
-
-// ── GITHUB SYNC ───────────────────────────────────────────────────────────────
-function ghToken() { return localStorage.getItem(GH_TOKEN_KEY) || ''; }
-
-function saveGhToken(val) {
-  if (val && val.length > 10) localStorage.setItem(GH_TOKEN_KEY, val);
-}
-
-async function ghLoadBalances() {
-  try {
-    const url = `https://raw.githubusercontent.com/${GH_REPO}/main/${GH_FILE}?t=${Date.now()}`;
-    const res = await fetch(url);
-    if (!res.ok) return false;
-    const data = await res.json();
-    if (data && typeof data === 'object') {
-      localStorage.setItem(BAL_STORE, JSON.stringify(data));
-      return true;
-    }
-  } catch(e) { console.warn('GH load failed:', e.message); }
+// ── GITHUB SYNC ──────────────────────────────────────────────────────────────
+function ghToken(){return localStorage.getItem(GH_TOKEN_KEY)||'';}
+function saveGhToken(v){if(v&&v.length>10)localStorage.setItem(GH_TOKEN_KEY,v);}
+async function ghLoadBalances(){
+  try{
+    const r=await fetch(`https://raw.githubusercontent.com/${GH_REPO}/main/balances.json?t=${Date.now()}`);
+    if(!r.ok)return false;
+    const d=await r.json();
+    if(d&&typeof d==='object'){localStorage.setItem(BAL_STORE,JSON.stringify(d));return true;}
+  }catch(e){console.warn('GH load:',e.message);}
   return false;
 }
-
-async function ghSaveBalances() {
-  const token = ghToken();
-  if (!token) return false;
-  const content = JSON.stringify(balGetAll(), null, 2);
-  const b64 = btoa(unescape(encodeURIComponent(content)));
-  try {
-    const metaRes = await fetch(
-      `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`,
-      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
-    );
-    const sha = metaRes.ok ? (await metaRes.json()).sha : undefined;
-    const body = JSON.stringify({ message: 'Update balances', content: b64, ...(sha ? {sha} : {}) });
-    const res = await fetch(
-      `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`,
-      { method: 'PUT', headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' }, body }
-    );
-    return res.ok;
-  } catch(e) { console.warn('GH save failed:', e.message); return false; }
+async function ghSaveBalances(){
+  const tk=ghToken(); if(!tk)return false;
+  const b64=btoa(unescape(encodeURIComponent(JSON.stringify(balGetAll(),null,2))));
+  try{
+    const m=await fetch(`https://api.github.com/repos/${GH_REPO}/contents/balances.json`,
+      {headers:{Authorization:`token ${tk}`,Accept:'application/vnd.github.v3+json'}});
+    const sha=m.ok?(await m.json()).sha:undefined;
+    const r=await fetch(`https://api.github.com/repos/${GH_REPO}/contents/balances.json`,{
+      method:'PUT',
+      headers:{Authorization:`token ${tk}`,Accept:'application/vnd.github.v3+json','Content-Type':'application/json'},
+      body:JSON.stringify({message:'Update balances',content:b64,...(sha?{sha}:{})})
+    });
+    return r.ok;
+  }catch(e){console.warn('GH save:',e.message);return false;}
 }
 
 async function fetchAllData(company) {
@@ -2912,7 +2919,7 @@ renderQuickBtns();
 
 updateCacheBadge();
 setStatus('');
-ghLoadBalances().then(ok => { if(ok){ renderQuickBtns(); } });
+ghLoadBalances().then(ok=>{if(ok)renderQuickBtns();});
 
 // ── LANGUAGE ──────────────────────────────────────────────────────────────────
 
@@ -3477,17 +3484,6 @@ function runComparison() {
   try {
     const existing = JSON.parse(localStorage.getItem(key) || '{}');
     const seed = {"YPF S.A.||2025||Q1": {"_moneda": "USD", "_unidad": "Millones", "_cons": "Consolidado", "_ts": 1700000000000, "revenue": 4608, "costs": -3180, "gross_profit": 1428, "ebit": 192, "da": 806, "fin_income": 33, "fin_cost": -280, "tax": -38, "net_income": -10, "ebitda_rep": 998, "adj_ebitda": 1245, "cash": 1230, "current_assets": 6800, "non_current_assets": 22400, "debt_st": 2023, "current_liab": 4200, "debt_lt": 7543, "non_current_liab": 9100, "equity": 11900, "cfo": 850, "capex": -1214, "cff": 354, "interest_paid": -180, "interest_received": 25, "debt_proceeds": 900, "debt_repay": -600, "mkt_cap": 7800}, "YPF S.A.||2025||Q2": {"_moneda": "USD", "_unidad": "Millones", "_cons": "Consolidado", "_ts": 1700000000000, "revenue": 4641, "costs": -3220, "gross_profit": 1421, "ebit": 412, "da": 788, "fin_income": 28, "fin_cost": -284, "tax": -92, "net_income": 58, "ebitda_rep": 1192, "adj_ebitda": 1124, "cash": 1011, "current_assets": 6500, "non_current_assets": 22600, "debt_st": 2252, "current_liab": 4400, "debt_lt": 7592, "non_current_liab": 9300, "equity": 11700, "cfo": 1146, "capex": -1160, "cff": 20, "interest_paid": -175, "interest_received": 22, "debt_proceeds": 800, "debt_repay": -700, "mkt_cap": 8200}, "YPF S.A.||2025||Q3": {"_moneda": "USD", "_unidad": "Millones", "_cons": "Consolidado", "_ts": 1700000000000, "revenue": 4643, "costs": -3260, "gross_profit": 1383, "ebit": 552, "da": 836, "fin_income": 28, "fin_cost": -272, "tax": -537, "net_income": -198, "ebitda_rep": 1393, "adj_ebitda": 1357, "cash": 1016, "current_assets": 6600, "non_current_assets": 22800, "debt_st": 2653, "current_liab": 4500, "debt_lt": 7958, "non_current_liab": 9400, "equity": 11500, "cfo": 1225, "capex": -1017, "cff": 497, "interest_paid": -168, "interest_received": 20, "debt_proceeds": 1100, "debt_repay": -500, "mkt_cap": 7600}, "YPF S.A.||2025||Q4": {"_moneda": "USD", "_unidad": "Millones", "_cons": "Consolidado", "_ts": 1700000000000, "revenue": 4556, "costs": -3232, "gross_profit": 1324, "ebit": 584, "da": 774, "fin_income": 33, "fin_cost": -239, "tax": -1042, "net_income": -649, "ebitda_rep": 1389, "adj_ebitda": 1283, "cash": 1195, "current_assets": 6477, "non_current_assets": 22962, "debt_st": 2355, "current_liab": 4800, "debt_lt": 8226, "non_current_liab": 9600, "equity": 11044, "cfo": 1738, "capex": -1086, "cff": -354, "interest_paid": -170, "interest_received": 18, "debt_proceeds": 700, "debt_repay": -900, "mkt_cap": 8500}, "Vista Energy||2025||Q1": {"_moneda": "USD", "_unidad": "Millones", "_cons": "Consolidado", "_ts": 1700000000000, "revenue": 482, "costs": -195, "gross_profit": 287, "ebit": 198, "da": 95, "fin_income": 4, "fin_cost": -28, "tax": -52, "net_income": 122, "ebitda_rep": 293, "adj_ebitda": 285, "cash": 142, "current_assets": 480, "non_current_assets": 2100, "debt_st": 180, "current_liab": 320, "debt_lt": 820, "non_current_liab": 920, "equity": 1340, "cfo": 210, "capex": -285, "cff": -15, "interest_paid": -22, "interest_received": 3, "debt_proceeds": 150, "debt_repay": -120, "mkt_cap": 2800}, "Vista Energy||2025||Q2": {"_moneda": "USD", "_unidad": "Millones", "_cons": "Consolidado", "_ts": 1700000000000, "revenue": 510, "costs": -200, "gross_profit": 310, "ebit": 215, "da": 100, "fin_income": 5, "fin_cost": -30, "tax": -58, "net_income": 132, "ebitda_rep": 315, "adj_ebitda": 308, "cash": 158, "current_assets": 510, "non_current_assets": 2180, "debt_st": 190, "current_liab": 340, "debt_lt": 840, "non_current_liab": 950, "equity": 1400, "cfo": 235, "capex": -310, "cff": -18, "interest_paid": -24, "interest_received": 4, "debt_proceeds": 160, "debt_repay": -130, "mkt_cap": 3100}, "Vista Energy||2025||Q3": {"_moneda": "USD", "_unidad": "Millones", "_cons": "Consolidado", "_ts": 1700000000000, "revenue": 498, "costs": -198, "gross_profit": 300, "ebit": 208, "da": 98, "fin_income": 4, "fin_cost": -29, "tax": -55, "net_income": 128, "ebitda_rep": 306, "adj_ebitda": 299, "cash": 145, "current_assets": 495, "non_current_assets": 2250, "debt_st": 185, "current_liab": 330, "debt_lt": 860, "non_current_liab": 970, "equity": 1445, "cfo": 220, "capex": -298, "cff": -12, "interest_paid": -23, "interest_received": 3, "debt_proceeds": 140, "debt_repay": -110, "mkt_cap": 2900}, "Vista Energy||2025||Q4": {"_moneda": "USD", "_unidad": "Millones", "_cons": "Consolidado", "_ts": 1700000000000, "revenue": 524, "costs": -205, "gross_profit": 319, "ebit": 225, "da": 102, "fin_income": 5, "fin_cost": -31, "tax": -60, "net_income": 139, "ebitda_rep": 327, "adj_ebitda": 318, "cash": 165, "current_assets": 525, "non_current_assets": 2310, "debt_st": 195, "current_liab": 350, "debt_lt": 875, "non_current_liab": 990, "equity": 1495, "cfo": 248, "capex": -320, "cff": -20, "interest_paid": -25, "interest_received": 4, "debt_proceeds": 170, "debt_repay": -140, "mkt_cap": 3300}};
-    // Add seed entries only if not already present
-    let changed = false;
-    Object.entries(seed).forEach(([k,v]) => {
-      if (!existing[k]) { existing[k] = v; changed = true; }
-      // Update mkt_cap if missing from existing entry
-      else if (!existing[k].mkt_cap && v.mkt_cap) { existing[k].mkt_cap = v.mkt_cap; changed = true; }
-    });
-    localStorage.setItem(key, JSON.stringify(existing));
-  } catch(e) {}
-})();
-bt_st": 195, "current_liab": 350, "debt_lt": 875, "non_current_liab": 990, "equity": 1495, "cfo": 248, "capex": -320, "cff": -20, "interest_paid": -25, "interest_received": 4, "debt_proceeds": 170, "debt_repay": -140, "mkt_cap": 3300}};
     // Add seed entries only if not already present
     let changed = false;
     Object.entries(seed).forEach(([k,v]) => {
