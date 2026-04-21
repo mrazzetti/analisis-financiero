@@ -656,7 +656,26 @@ body.dark {
   <div id="compContent"></div>
 </div>
 
-<script>function validateBalance() {
+<script>function updateAllCalcDisplays() {
+  const sec = fmCurrentSection;
+  BAL_FIELDS[sec]?.forEach(f => {
+    if (f.calc === 'auto' || (f.calc && f.display)) {
+      const v = computeCalcField(f, uFormData);
+      // Update read-only display
+      const dispEl = document.getElementById('calc_'+f.key);
+      if (dispEl) dispEl.innerHTML = v!==null
+        ? Number(v).toLocaleString('es-AR',{maximumFractionDigits:1})
+        : '<span style="color:var(--text3);font-size:11px">completá campos</span>';
+      // Update editable input if not overridden by user
+      if (f.editable && uFormData['_override_'+f.key]===undefined) {
+        const inp = document.getElementById('fi_'+f.key);
+        if (inp && v!==null) inp.value = v;
+      }
+    }
+  });
+  if (fmCurrentSection==='balance') validateBalance();
+}
+function validateBalance() {
   const banner = document.getElementById('balValidation');
   if (!banner) return;
   const get = k => { const v=uFormData[k]; return (v!==undefined&&v!==null&&v!=='')?parseFloat(v):null; };
@@ -1505,30 +1524,64 @@ function renderFmFields(sec) {
   if(!cont) return;
 
   cont.innerHTML = fields.map(f => {
-    const isCalc    = f.calc && f.display;  // auto-calculated, just shown
-    const isOptional= f.optional;
-    const val = data[f.key] !== undefined ? data[f.key] : '';
-    const calcVal = isCalc ? computeCalcField(f, data) : null;
+    const isAutoOnly = f.calc==='auto' && f.display && !f.editable;  // green read-only
+    const isAutoEdit = f.calc==='auto' && f.editable;                 // pre-filled editable
+    const isLegacyCalc = f.calc && f.calc!=='auto' && f.display;     // old-style display
+    const isOptional = f.optional;
 
-    if(isCalc) {
+    const calcVal = (f.calc==='auto'||isLegacyCalc) ? computeCalcField(f, data) : null;
+    const overrideVal = data['_override_'+f.key];
+    const displayVal  = overrideVal !== undefined ? overrideVal
+                      : (data[f.key] !== undefined ? data[f.key] : '');
+
+    // Auto-only: green read-only display
+    if (isAutoOnly || isLegacyCalc) {
       return `<div class="frow" style="background:var(--bg3);border-radius:5px;padding:6px 10px">
         <span class="flabel" style="color:var(--text3)">${f.lbl}</span>
         <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--green)" id="calc_${f.key}">
-          ${calcVal !== null ? Number(calcVal).toLocaleString('es-AR',{maximumFractionDigits:1}) : 'Completá los campos necesarios'}
+          ${calcVal !== null ? Number(calcVal).toLocaleString('es-AR',{maximumFractionDigits:1}) : '<span style="color:var(--text3);font-size:11px">completá campos</span>'}
         </span>
       </div>`;
     }
 
+    // Auto-editable: pre-filled green input with reset button
+    if (isAutoEdit) {
+      const showVal = overrideVal !== undefined ? overrideVal : (calcVal !== null ? calcVal : '');
+      return `<div class="frow">
+        <span class="flabel">${f.lbl}
+          <span style="font-size:10px;color:var(--green);margin-left:4px" id="calcbadge_${f.key}">${overrideVal!==undefined?'(editado)':'(auto)'}</span>
+        </span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" step="any" id="fi_${f.key}"
+            value="${showVal}"
+            style="width:150px;padding:5px 9px;background:var(--bg3);border:0.5px solid var(--green);border-radius:5px;
+                   color:var(--text);font-family:'DM Mono',monospace;font-size:12px;text-align:right;outline:none"
+            oninput="overrideCalcField('${f.key}',this.value)"
+            onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--green)'">
+          <button onclick="resetCalcField('${f.key}')" title="Restaurar calculado"
+            style="padding:3px 7px;font-size:11px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;color:var(--text3);cursor:pointer;font-family:'DM Sans',sans-serif">↺</button>
+        </div>
+      </div>`;
+    }
+
+    // Normal editable input
     return `<div class="frow">
       <span class="flabel">${f.lbl}${isOptional?' <span style="font-size:10px;color:var(--text3)">(opcional)</span>':''}</span>
-      <input type="number" step="any" id="fi_${f.key}" value="${val}" placeholder="N/D"
+      <input type="number" step="any" id="fi_${f.key}" value="${displayVal}" placeholder="N/D"
         style="width:160px;padding:5px 9px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:5px;
                color:var(--text);font-family:'DM Mono',monospace;font-size:12px;text-align:right;outline:none"
         oninput="updateFormField('${f.key}',this.value)"
         onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border2)'">
     </div>`;
   }).join('');
+
+  // Balance validation banner
+  if (sec==='balance') {
+    cont.innerHTML += `<div id="balValidation" style="margin-top:.75rem;padding:8px 12px;border-radius:6px;font-size:12px;display:none"></div>`;
+    validateBalance();
+  }
 }
+
 
 function computeCalcField(f, data) {
   const get = k => {
