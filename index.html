@@ -1978,9 +1978,7 @@ function buildFromManualBalances(company) {
   const quarterlyReports = [...quarters.map(toReport), ...annuals.map(toReport)].slice(0,8);
 
   // Overview stub from company info
-  // For ratios: prefer annual/Q4 which has all balance fields
-  const latestForRatios = annuals[0] || quarters[0];
-  const latest = latestForRatios;
+  const latest = annuals[0] || quarters[0];
   const d = calcDerived(latest.data);
   const m = mult(latest);
   // Calculate ratios from latest balance data
@@ -1996,11 +1994,11 @@ function buildFromManualBalances(company) {
   const _mktcap = latest.data.mkt_cap ? latest.data.mkt_cap * 1e6 : null;
   const _nd   = _d.net_debt  ? _d.net_debt  * _m : null;
 
-  console.log('[Ratios]', company.ticker, {_rev:_rev?Math.round(_rev/1e6)+'M':null, _ni:_ni?Math.round(_ni/1e6)+'M':null, _eq:_eq?Math.round(_eq/1e6)+'M':null, _ta:_ta?Math.round(_ta/1e6)+'M':null, unidad:latest.data._unidad, q:latest.q});
-  const _roe      = (_ni&&_eq&&_eq!==0)          ? String(_ni/_eq)                : 'None';
-  const _roa      = (_ni&&_ta&&_ta!==0)          ? String(_ni/_ta)                : 'None';
-  const _profMgn  = (_ni&&_rev&&_rev!==0)        ? String(_ni/_rev)               : 'None';
-  const _opMgn    = (_ebit&&_rev&&_rev!==0)      ? String(_ebit/_rev)             : 'None';
+  // Ratios — use !== null check so zero values work
+  const _roe     = (_ni!==null&&_eq!==null&&_eq!==0)     ? String(_ni/_eq)          : 'None';
+  const _roa     = (_ni!==null&&_ta!==null&&_ta!==0)     ? String(_ni/_ta)          : 'None';
+  const _profMgn = (_ni!==null&&_rev!==null&&_rev!==0)   ? String(_ni/_rev)         : 'None';
+  const _opMgn   = (_ebit!==null&&_rev!==null&&_rev!==0) ? String(_ebit/_rev)       : 'None';
   const _evEbitda = (_mktcap&&_nd!==null&&_ebitda&&_ebitda!==0)
                     ? String((_mktcap+_nd)/_ebitda)                                : 'None';
   const _pe       = (_mktcap&&_ni&&_ni>0)        ? String(_mktcap/_ni)            : 'None';
