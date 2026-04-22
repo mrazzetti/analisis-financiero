@@ -1209,9 +1209,12 @@ function viewBalance(key) {
   const db = balGetAll(); const entry = db[key]; if (!entry) return;
   const [co,year,q] = key.split('||');
   const data = calcDerived(entry);
-  const detail = document.getElementById('balDetail');
+  // Switch to ver tab
+  const btabVer = document.getElementById('btabVer');
+  switchBalTab('ver', btabVer);
+  const detail = document.getElementById('balTabVer');
   if (!detail) return;
-  detail.style.display = 'block';
+  detail.style.display = '';
   const fmt = v => (v===null||v===undefined||isNaN(v)) ? '<span style="color:var(--text3)">N/D</span>'
     : `<span style="font-family:'DM Mono',monospace">${Number(v).toLocaleString('es-AR',{maximumFractionDigits:1})}</span>`;
   const secs = [
@@ -3479,7 +3482,7 @@ function getAvailablePeriods(names) {
   names.forEach(name => {
     Object.keys(db).filter(k => k.startsWith(name+'||')).forEach(k => {
       const [,year,q] = k.split('||');
-      if (['Q1','Q2','Q3','Q4'].includes(q)) periods.add(`${year}||${q}`);
+      if (['Q1','Q2','Q3','Q4','Anual'].includes(q)) periods.add(`${year}||${q}`);
     });
   });
   return [...periods].sort((a,b) => {
