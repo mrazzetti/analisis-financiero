@@ -1745,17 +1745,14 @@ function saveManualBalance() {
 
   // Derive complementary period if all other quarters are present
   if (q === 'Anual') {
-    // Derive Q4 flows from Anual - (Q1+Q2+Q3)
+    // Only derive Q4 if we have Q1+Q2+Q3 — otherwise don't create Q4
     const derived = deriveQ4fromAnual(co, year);
     if (derived) {
       db[balKey(co, year, 'Q4')] = {...derived, _ts: Date.now(), _derived: true};
       balSave(db);
       console.log('Q4 derivado desde Anual');
-    } else {
-      // No Q1/Q2/Q3 yet — just copy as Q4 (stocks only basis)
-      db[balKey(co, year, 'Q4')] = {...finalData, _ts: Date.now(), _derived: true};
-      balSave(db);
     }
+    // If no Q1/Q2/Q3 yet: Q4 entry not created. Will be derived when they're loaded.
   } else if (q === 'Q4') {
     // Derive Anual flows from Q1+Q2+Q3+Q4
     const derived = deriveAnualfromQ4(co, year);
@@ -1774,22 +1771,24 @@ function saveManualBalance() {
       }
     }
   } else if (['Q1','Q2','Q3'].includes(q)) {
-    // Re-derive Q4/Anual if we now have all pieces
+    // Try to re-derive Q4 from Anual (Anual may have been loaded manually)
     const anual = db[balKey(co, year, 'Anual')];
-    const q4    = db[balKey(co, year, 'Q4')];
+    const q4man = db[balKey(co, year, 'Q4')];
     if (anual && !anual._derived) {
+      // Manual Anual exists → try to derive Q4
       const derived = deriveQ4fromAnual(co, year);
       if (derived) {
         db[balKey(co, year, 'Q4')] = {...derived, _ts: Date.now(), _derived: true};
         balSave(db);
-        console.log('Q4 re-derivado al cargar', q);
+        console.log('Q4 derivado desde Anual al cargar', q);
       }
-    } else if (q4 && !q4._derived) {
+    } else if (q4man && !q4man._derived) {
+      // Manual Q4 exists → try to derive Anual
       const derived = deriveAnualfromQ4(co, year);
       if (derived) {
         db[balKey(co, year, 'Anual')] = {...derived, _ts: Date.now(), _derived: true};
         balSave(db);
-        console.log('Anual re-derivado al cargar', q);
+        console.log('Anual derivado desde Q4 al cargar', q);
       }
     }
   }
