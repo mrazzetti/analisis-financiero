@@ -1174,15 +1174,15 @@ function renderBalTree() {
   var html='';
   Object.keys(cos).sort().forEach(function(co){
     html+='<div class="tree-item">';
-    html+='<div class="tree-co" onclick="toggleTreeCo(this)">';
+    html+='<div class="tree-co open" onclick="toggleTreeCo(this)">';
     html+='<span class="tree-co-icon">▶</span><span>'+co+'</span>';
     html+='<span style="margin-left:auto;font-size:10px;color:var(--text3)">'+Object.keys(cos[co]).length+' año(s)</span>';
-    html+='</div><div class="tree-years">';
+    html+='</div><div class="tree-years open">';
     Object.keys(cos[co]).sort().reverse().forEach(function(yr){
       var periods=cos[co][yr].slice().sort(function(a,b){return (qOrder[a.q]||9)-(qOrder[b.q]||9);});
-      html+='<div class="tree-year" onclick="toggleTreeYear(this)">';
+      html+='<div class="tree-year open" onclick="toggleTreeYear(this)">';
       html+='<span class="tree-year-icon">▶</span><span>'+yr+'</span></div>';
-      html+='<div class="tree-periods">';
+      html+='<div class="tree-periods open">';
       periods.forEach(function(p){
         var style=p.derived?' style="color:var(--text3);font-style:italic"':'';
         var label=p.q+(p.derived?' <span style="font-size:9px">(derivado)</span>':'');
