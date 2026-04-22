@@ -539,7 +539,10 @@ body.dark {
 <div class="bal-view" id="balancesView">
   <div class="bal-two-col">
     <div class="bal-tree-wrap">
-      <input class="bal-search" id="balSearch" placeholder="Buscar empresa..." oninput="filterBalTree(this.value)">
+      <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+        <input class="bal-search" id="balSearch" placeholder="Buscar empresa..." oninput="filterBalTree(this.value)" style="flex:1">
+        <button onclick="rederiveAll()" class="gb" style="font-size:11px;padding:4px 10px;white-space:nowrap" title="Re-calcula Q4/Anual desde trimestres">↻ Re-derivar</button>
+      </div>
       <div id="balTree"><div class="bal-empty-tree">Todavía no hay balances cargados.<br>Usá "Cargar balance" para agregar el primero.</div></div>
     </div>
     <div>
@@ -1082,164 +1085,114 @@ function calcDerived(data) {
 }
 
 // ── Calculate Q4 from Annual - Q1adj - Q2adj - Q3adj ──────────────────────────
-// ── Period derivation ─────────────────────────────────────────────────────────
-// Adjust flow value from Qx to Q4 prices (ARS only)
+// ── Period derivation helpers ──────────────────────────────────────────────────
 function inflationAdj(val, fromQ, year, moneda) {
-  if (!val || isNaN(val)) return 0;
+  if (!val || isNaN(parseFloat(val))) return 0;
   if (moneda !== 'ARS') return parseFloat(val);
   const f = ipcFactor(year, fromQ, year, 'Q4');
   return f ? parseFloat(val) * f : parseFloat(val);
 }
-
-// Given Anual + Q1+Q2+Q3 → compute Q4 flows (stocks copied from Anual)
 function deriveQ4fromAnual(co, year) {
   const db = balGetAll();
-  const anual = db[balKey(co, year, 'Anual')] || db[balKey(co, year, 'Q4')];
-  const q1 = db[balKey(co, year, 'Q1')];
-  const q2 = db[balKey(co, year, 'Q2')];
-  const q3 = db[balKey(co, year, 'Q3')];
-  if (!anual || !q1 || !q2 || !q3) return null;
-  const moneda = anual._moneda || 'USD';
-  const result = {};
-  Object.keys(anual).forEach(k => {
-    if (k.startsWith('_')) { result[k] = anual[k]; return; }
-    if (STOCK_FIELDS.has(k)) {
-      result[k] = anual[k]; // stock: Q4 = Anual
-    } else {
-      const a  = parseFloat(anual[k]);
-      if (isNaN(a)) return;
-      const v1 = inflationAdj(q1[k], 'Q1', year, moneda);
-      const v2 = inflationAdj(q2[k], 'Q2', year, moneda);
-      const v3 = inflationAdj(q3[k], 'Q3', year, moneda);
-      result[k] = a - v1 - v2 - v3;
-    }
+  const anual = db[balKey(co,year,'Anual')] || db[balKey(co,year,'Q4')];
+  const q1=db[balKey(co,year,'Q1')], q2=db[balKey(co,year,'Q2')], q3=db[balKey(co,year,'Q3')];
+  if (!anual||!q1||!q2||!q3) return null;
+  const moneda = anual._moneda||'USD', result={};
+  Object.keys(anual).forEach(k=>{
+    if(k.startsWith('_')){result[k]=anual[k];return;}
+    if(STOCK_FIELDS.has(k)){result[k]=anual[k];return;}
+    const a=parseFloat(anual[k]); if(isNaN(a)) return;
+    result[k]=a-inflationAdj(q1[k],'Q1',year,moneda)-inflationAdj(q2[k],'Q2',year,moneda)-inflationAdj(q3[k],'Q3',year,moneda);
   });
   return result;
 }
-
-// Given Q4 + Q1+Q2+Q3 → compute Anual flows (stocks copied from Q4)
 function deriveAnualfromQ4(co, year) {
   const db = balGetAll();
-  const q4 = db[balKey(co, year, 'Q4')];
-  const q1 = db[balKey(co, year, 'Q1')];
-  const q2 = db[balKey(co, year, 'Q2')];
-  const q3 = db[balKey(co, year, 'Q3')];
-  if (!q4 || !q1 || !q2 || !q3) return null;
-  const moneda = q4._moneda || 'USD';
-  const result = {};
-  Object.keys(q4).forEach(k => {
-    if (k.startsWith('_')) { result[k] = q4[k]; return; }
-    if (STOCK_FIELDS.has(k)) {
-      result[k] = q4[k]; // stock: Anual = Q4
-    } else {
-      const v1 = inflationAdj(q1[k], 'Q1', year, moneda);
-      const v2 = inflationAdj(q2[k], 'Q2', year, moneda);
-      const v3 = inflationAdj(q3[k], 'Q3', year, moneda);
-      const v4 = inflationAdj(q4[k], 'Q4', year, moneda);
-      result[k] = v1 + v2 + v3 + v4;
-    }
+  const q4=db[balKey(co,year,'Q4')];
+  const q1=db[balKey(co,year,'Q1')], q2=db[balKey(co,year,'Q2')], q3=db[balKey(co,year,'Q3')];
+  if (!q4||!q1||!q2||!q3) return null;
+  const moneda = q4._moneda||'USD', result={};
+  Object.keys(q4).forEach(k=>{
+    if(k.startsWith('_')){result[k]=q4[k];return;}
+    if(STOCK_FIELDS.has(k)){result[k]=q4[k];return;}
+    result[k]=inflationAdj(q1[k],'Q1',year,moneda)+inflationAdj(q2[k],'Q2',year,moneda)+inflationAdj(q3[k],'Q3',year,moneda)+inflationAdj(q4[k],'Q4',year,moneda);
   });
   return result;
 }
+function calcQ4(co,year){return deriveQ4fromAnual(co,year);}
 
-// Legacy alias
-function calcQ4(co, year) { return deriveQ4fromAnual(co, year); }
-
-
-
-// ── RE-DERIVE ALL PERIODS ─────────────────────────────────────────────────────
+// ── Re-derive all ─────────────────────────────────────────────────────────────
 function rederiveAll() {
-  const db = balGetAll();
-  // Group by company+year
-  const groups = {};
-  Object.keys(db).forEach(k => {
-    const [co, year, q] = k.split('||');
-    const gk = co + '||' + year;
-    if (!groups[gk]) groups[gk] = {co, year, qs: []};
+  const db=balGetAll();
+  const groups={};
+  Object.keys(db).forEach(k=>{
+    const [co,year,q]=k.split('||');
+    const gk=co+'||'+year;
+    if(!groups[gk]) groups[gk]={co,year,qs:[]};
     groups[gk].qs.push(q);
   });
-
-  let count = 0;
-  Object.values(groups).forEach(({co, year, qs}) => {
-    const hasAnual = qs.includes('Anual');
-    const hasQ4    = qs.includes('Q4');
-    const hasQ1    = qs.includes('Q1');
-    const hasQ2    = qs.includes('Q2');
-    const hasQ3    = qs.includes('Q3');
-
-    // If we have Anual + Q1+Q2+Q3 → re-derive Q4
-    if (hasAnual && hasQ1 && hasQ2 && hasQ3) {
-      const derived = deriveQ4fromAnual(co, year);
-      if (derived) {
-        db[balKey(co, year, 'Q4')] = {...derived, _ts: Date.now(), _derived: true};
-        count++;
-        console.log('Re-derived Q4 for', co, year);
-      }
+  let count=0;
+  Object.values(groups).forEach(({co,year,qs})=>{
+    const hasAnual=qs.includes('Anual'), hasQ4=qs.includes('Q4');
+    const hasQ1=qs.includes('Q1'), hasQ2=qs.includes('Q2'), hasQ3=qs.includes('Q3');
+    if(hasAnual&&hasQ1&&hasQ2&&hasQ3){
+      const d=deriveQ4fromAnual(co,year);
+      if(d){db[balKey(co,year,'Q4')]={...d,_ts:Date.now(),_derived:true};count++;}
     }
-    // If we have Q4 + Q1+Q2+Q3 → re-derive Anual
-    if (hasQ4 && hasQ1 && hasQ2 && hasQ3 && !hasAnual) {
-      const derived = deriveAnualfromQ4(co, year);
-      if (derived) {
-        db[balKey(co, year, 'Anual')] = {...derived, _ts: Date.now(), _derived: true};
-        count++;
-        console.log('Re-derived Anual for', co, year);
-      }
+    if(hasQ4&&hasQ1&&hasQ2&&hasQ3&&!hasAnual){
+      const d=deriveAnualfromQ4(co,year);
+      if(d){db[balKey(co,year,'Anual')]={...d,_ts:Date.now(),_derived:true};count++;}
     }
   });
-
-  if (count > 0) {
+  if(count>0){
     balSave(db);
-    ghSaveBalances().then(ok => console.log(ok ? 'GH: sync ok' : 'GH: local only'));
+    ghSaveBalances().then(ok=>console.log(ok?'GH:ok':'GH:local'));
     renderBalTree();
-    alert(count + ' período(s) re-derivado(s) correctamente.');
+    alert(count+' período(s) re-derivado(s) correctamente.');
   } else {
-    alert('No se encontraron períodos para re-derivar. Verificá que tengas Q1+Q2+Q3 y Anual (o Q4) cargados.');
+    alert('No se encontraron períodos para re-derivar. Necesitás Q1+Q2+Q3 y Anual (o Q4) cargados.');
   }
 }
+
 
 // ── Tree renderer ─────────────────────────────────────────────────────────────
 function renderBalTree() {
-  const db = balGetAll();
-  const tree = document.getElementById('balTree');
-  if (!tree) return;
-  const companies = {};
-  Object.entries(db).forEach(([k,v]) => {
-    const [co,year,q] = k.split('||');
-    if (!companies[co]) companies[co] = {};
-    if (!companies[co][year]) companies[co][year] = [];
-    if (!companies[co][year].find(p=>p.q===q))
-      companies[co][year].push({q, key:k});
+  const db=balGetAll(), tree=document.getElementById('balTree');
+  if(!tree) return;
+  const cos={};
+  Object.entries(db).forEach(function([k,v]){
+    const parts=k.split('||'), co=parts[0], year=parts[1], q=parts[2];
+    if(!cos[co]) cos[co]={};
+    if(!cos[co][year]) cos[co][year]=[];
+    if(!cos[co][year].find(function(p){return p.q===q;})) cos[co][year].push({q:q,key:k,derived:!!v._derived});
   });
-  if (!Object.keys(companies).length) {
-    tree.innerHTML='<div class="bal-empty-tree">Todavía no hay balances cargados.<br>Usá "Cargar balance" para agregar el primero.</div>';
+  if(!Object.keys(cos).length){
+    tree.innerHTML='<div style="padding:1rem;color:var(--text3);font-size:13px;text-align:center">No hay balances cargados.</div>';
     return;
   }
-  const qOrder = {'Q1':1,'Q2':2,'Q3':3,'Q4':4,'Anual':5};
-  tree.innerHTML = Object.keys(companies).sort().map(co => `
-    <div class="tree-item">
-      <div class="tree-co" onclick="toggleTreeCo(this)">
-        <span class="tree-co-icon">▶</span>
-        <span>${co}</span>
-        <span style="margin-left:auto;font-size:10px;color:var(--text3)">${Object.keys(companies[co]).length} año${Object.keys(companies[co]).length>1?'s':''}</span>
-      </div>
-      <div class="tree-years">
-        ${Object.keys(companies[co]).sort().reverse().map(yr => {
-          const periods = companies[co][yr].sort((a,b)=>(qOrder[a.q]||9)-(qOrder[b.q]||9));
-          const hasAnual = periods.some(p=>p.q==='Q4'||p.q==='Anual');
-          return `<div class="tree-year" onclick="toggleTreeYear(this)">
-            <span class="tree-year-icon">▶</span>
-            <span>${yr}</span>
-            ${hasAnual?'<span class="period-badge anual" style="margin-left:auto">Anual</span>':''}
-          </div>
-          <div class="tree-periods">
-            ${periods.map(p=>`
-              <div class="tree-period" onclick="viewBalance('${p.key}')">
-                ${p.q==='Q4'?'Q4 / Anual':p.q}
-              </div>`).join('')}
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`).join('');
+  const qOrder={Q1:1,Q2:2,Q3:3,Q4:4,Anual:5};
+  var html='';
+  Object.keys(cos).sort().forEach(function(co){
+    html+='<div class="tree-item">';
+    html+='<div class="tree-co" onclick="toggleTreeCo(this)">';
+    html+='<span class="tree-co-icon">▶</span><span>'+co+'</span>';
+    html+='<span style="margin-left:auto;font-size:10px;color:var(--text3)">'+Object.keys(cos[co]).length+' año(s)</span>';
+    html+='</div><div class="tree-years">';
+    Object.keys(cos[co]).sort().reverse().forEach(function(yr){
+      var periods=cos[co][yr].slice().sort(function(a,b){return (qOrder[a.q]||9)-(qOrder[b.q]||9);});
+      html+='<div class="tree-year" onclick="toggleTreeYear(this)">';
+      html+='<span class="tree-year-icon">▶</span><span>'+yr+'</span></div>';
+      html+='<div class="tree-periods">';
+      periods.forEach(function(p){
+        var style=p.derived?' style="color:var(--text3);font-style:italic"':'';
+        var label=p.q+(p.derived?' <span style="font-size:9px">(derivado)</span>':'');
+        html+='<div class="tree-period"'+style+' onclick="viewBalance('+JSON.stringify(p.key)+')">'+label+'</div>';
+      });
+      html+='</div>';
+    });
+    html+='</div></div>';
+  });
+  tree.innerHTML=html;
 }
 
 function toggleTreeCo(el) { el.classList.toggle('open'); el.nextElementSibling.classList.toggle('open'); }
@@ -1758,16 +1711,12 @@ function saveManualBalance() {
   const cons   = document.getElementById('fmCons')?.value;
 
   if(!co || !year || !q) { alert('Completá empresa, año y período'); return; }
-  // Enforce quarter order: can't load Q2 without Q1, Q3 without Q2, etc.
-  const db0 = balGetAll();
-  const qOrder = {'Q1':1,'Q2':2,'Q3':3,'Q4':4,'Anual':5};
-  if (['Q2','Q3','Q4'].includes(q)) {
-    const required = Object.keys(qOrder).filter(k => qOrder[k] < qOrder[q] && k !== 'Anual');
-    const missing  = required.filter(prev => !db0[balKey(co, year, prev)]);
-    if (missing.length > 0) {
-      alert('Para cargar ' + q + ' primero debés cargar: ' + missing.join(', ') + ' de ' + year + '.');
-      return;
-    }
+  const db0=balGetAll();
+  const qOrd={'Q1':1,'Q2':2,'Q3':3,'Q4':4,'Anual':5};
+  if(['Q2','Q3','Q4'].includes(q)){
+    const need=Object.keys(qOrd).filter(k=>qOrd[k]<qOrd[q]&&k!=='Anual');
+    const miss=need.filter(p=>!db0[balKey(co,year,p)]);
+    if(miss.length>0){alert('Para cargar '+q+' primero cargá: '+miss.join(', ')+' de '+year+'.');return;}
   }
   // Block if balance doesn't square (with tolerance)
   const _g = k => { const v=uFormData[k]; return (v!==undefined&&v!==null&&v!=='')?parseFloat(v):null; };
@@ -1794,54 +1743,18 @@ function saveManualBalance() {
   db[key] = finalData;
   balSave(db);
 
-  // Derive complementary period if all other quarters are present
-  if (q === 'Anual') {
-    // Only derive Q4 if we have Q1+Q2+Q3 — otherwise don't create Q4
-    const derived = deriveQ4fromAnual(co, year);
-    if (derived) {
-      db[balKey(co, year, 'Q4')] = {...derived, _ts: Date.now(), _derived: true};
-      balSave(db);
-      console.log('Q4 derivado desde Anual');
-    }
-    // If no Q1/Q2/Q3 yet: Q4 entry not created. Will be derived when they're loaded.
-  } else if (q === 'Q4') {
-    // Derive Anual flows from Q1+Q2+Q3+Q4
-    const derived = deriveAnualfromQ4(co, year);
-    if (derived) {
-      db[balKey(co, year, 'Anual')] = {...derived, _ts: Date.now(), _derived: true};
-      balSave(db);
-      console.log('Anual derivado desde Q4');
-    }
-    // Also re-derive Q4 for previously loaded Anual if it existed
-    const anualKey = balKey(co, year, 'Anual');
-    if (!derived && db[anualKey]) {
-      const rederived = deriveQ4fromAnual(co, year);
-      if (rederived) {
-        db[balKey(co, year, 'Q4')] = {...rederived, _ts: Date.now(), _derived: true};
-        balSave(db);
-      }
-    }
-  } else if (['Q1','Q2','Q3'].includes(q)) {
-    // Try to re-derive Q4 from Anual (Anual may have been loaded manually)
-    const anual = db[balKey(co, year, 'Anual')];
-    const q4man = db[balKey(co, year, 'Q4')];
-    if (anual && !anual._derived) {
-      // Manual Anual exists → try to derive Q4
-      const derived = deriveQ4fromAnual(co, year);
-      if (derived) {
-        db[balKey(co, year, 'Q4')] = {...derived, _ts: Date.now(), _derived: true};
-        balSave(db);
-        console.log('Q4 derivado desde Anual al cargar', q);
-      }
-    } else if (q4man && !q4man._derived) {
-      // Manual Q4 exists → try to derive Anual
-      const derived = deriveAnualfromQ4(co, year);
-      if (derived) {
-        db[balKey(co, year, 'Anual')] = {...derived, _ts: Date.now(), _derived: true};
-        balSave(db);
-        console.log('Anual derivado desde Q4 al cargar', q);
-      }
-    }
+  // Derive complementary period
+  if(q==='Anual'){
+    const d=deriveQ4fromAnual(co,year);
+    if(d){db[balKey(co,year,'Q4')]={...d,_ts:Date.now(),_derived:true};balSave(db);}
+  } else if(q==='Q4'){
+    const d=deriveAnualfromQ4(co,year);
+    if(d){db[balKey(co,year,'Anual')]={...d,_ts:Date.now(),_derived:true};balSave(db);}
+  } else if(['Q1','Q2','Q3'].includes(q)){
+    const anual=db[balKey(co,year,'Anual')];
+    const q4=db[balKey(co,year,'Q4')];
+    if(anual&&!anual._derived){const d=deriveQ4fromAnual(co,year);if(d){db[balKey(co,year,'Q4')]={...d,_ts:Date.now(),_derived:true};balSave(db);}}
+    else if(q4&&!q4._derived){const d=deriveAnualfromQ4(co,year);if(d){db[balKey(co,year,'Anual')]={...d,_ts:Date.now(),_derived:true};balSave(db);}}
   }
 
   renderBalTree();
@@ -1885,52 +1798,38 @@ function switchBalTab(tab, el) {
 }
 
 
-// ── IMPORT FROM EXCEL ─────────────────────────────────────────────────────────
 function importFromExcel(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    try {
-      const wb = XLSX.read(ev.target.result, {type:'array'});
-      const ws = wb.Sheets['Balance'];
-      if (!ws) { alert('No se encontró la hoja "Balance" en el archivo.'); return; }
-      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-      // Skip purely auto-calculated display fields; gross_profit is editable
-      const calcKeys = new Set(['ebitda_calc','fin_net','fcf',
-        'total_assets','total_liab','net_debt','total_debt','net_debt_d']);
-      const formData = {};
-      rows.forEach(function(row) {
-        const key = String(row[2]||'').trim();
-        const val = row[1];
-        if (!key || key.startsWith('_') || calcKeys.has(key)) return;
-        if (val===''||val===undefined||val===null) return;
-        const n = parseFloat(String(val).replace(/,/g,''));
-        if (!isNaN(n)) formData[key] = n;
+  const file=event.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'});
+      const ws=wb.Sheets['Balance'];
+      if(!ws){alert('No se encontró la hoja "Balance".');return;}
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const calcKeys=new Set(['ebitda_calc','fin_net','fcf','total_assets','total_liab','net_debt','total_debt','net_debt_d']);
+      const formData={};
+      rows.forEach(function(row){
+        const key=String(row[2]||'').trim();
+        const val=row[1];
+        if(!key||key.startsWith('_')||calcKeys.has(key)) return;
+        if(val===''||val===undefined||val===null) return;
+        const n=parseFloat(String(val).replace(/,/g,''));
+        if(!isNaN(n)) formData[key]=n;
       });
-      if (!Object.keys(formData).length) {
-        alert('No se encontraron datos en el archivo. Verificá que completaste la hoja "Balance".');
-        return;
-      }
-      // Keep existing meta (identification set in web form)
-      uFormData = formData;
-      const btab = document.getElementById('btabCargar');
-      switchBalTab('cargar', btab);
-      if (!pinUnlocked) {
-        document.getElementById('pinGate').style.display='flex';
-        document.getElementById('uploadForm').style.display='none';
-        alert('Ingresá el PIN para continuar.');
-        return;
-      }
+      if(!Object.keys(formData).length){alert('No se encontraron datos. Verificá la hoja "Balance".');return;}
+      uFormData=formData;
+      const btab=document.getElementById('btabCargar');
+      switchBalTab('cargar',btab);
+      if(!pinUnlocked){document.getElementById('pinGate').style.display='flex';document.getElementById('uploadForm').style.display='none';alert('Ingresá el PIN para continuar.');return;}
       document.getElementById('pinGate').style.display='none';
       document.getElementById('uploadForm').style.display='block';
       renderManualForm();
-      setStatus('Excel importado · '+Object.keys(formData).length+' campos cargados. Completá identificación y guardá.','green');
-    } catch(err) { alert('Error al leer el Excel: '+err.message); console.error(err); }
+      setStatus('Excel importado · '+Object.keys(formData).length+' campos. Completá identificación y guardá.','green');
+    }catch(err){alert('Error al leer el Excel: '+err.message);}
   };
   reader.readAsArrayBuffer(file);
 }
-
 // ── GITHUB SYNC ──────────────────────────────────────────────────────────────
 function ghToken(){return localStorage.getItem(GH_TOKEN_KEY)||'';}
 function saveGhToken(v){if(v&&v.length>10)localStorage.setItem(GH_TOKEN_KEY,v);}
