@@ -6,6 +6,7 @@
 <title>AnálisisARG — Modelización Financiera</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root {
   --bg:#f5f6f8; --bg2:#ffffff; --bg3:#f0f2f5; --bg4:#e8eaed;
@@ -1423,7 +1424,13 @@ function renderManualForm() {
   cont.innerHTML = `
     <div style="margin-bottom:1.25rem">
       <div style="font-size:13px;font-weight:500;margin-bottom:.75rem;color:var(--text)">
-        ${uEditKey ? '✏ Editar balance' : '+ Cargar nuevo balance'}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <span>${uEditKey ? '✏ Editar balance' : '+ Cargar nuevo balance'}</span>
+          <label style="display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--blue2);border:0.5px solid var(--blue);border-radius:6px;cursor:pointer;font-size:11px;color:var(--blue);font-weight:500">
+            📥 Importar Excel
+            <input type="file" accept=".xlsx" style="display:none" onchange="importFromExcel(event)">
+          </label>
+        </div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:1rem">
@@ -1740,6 +1747,52 @@ function switchBalTab(tab, el) {
     document.getElementById('uploadForm').style.display='none';
     const _t=document.getElementById('ghTokenInput');if(_t)_t.value=ghToken();
   }
+}
+
+
+// ── IMPORT FROM EXCEL ─────────────────────────────────────────────────────────
+function importFromExcel(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'array'});
+      const ws = wb.Sheets['Balance'];
+      if (!ws) { alert('No se encontró la hoja "Balance" en el archivo.'); return; }
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      const calcKeys = new Set(['gross_profit','ebitda_calc','fin_net','fcf',
+        'total_assets','total_liab','net_debt','total_debt','net_debt_d']);
+      const formData = {};
+      rows.forEach(function(row) {
+        const key = String(row[2]||'').trim();
+        const val = row[1];
+        if (!key || key.startsWith('_') || calcKeys.has(key)) return;
+        if (val===''||val===undefined||val===null) return;
+        const n = parseFloat(String(val).replace(/,/g,''));
+        if (!isNaN(n)) formData[key] = n;
+      });
+      if (!Object.keys(formData).length) {
+        alert('No se encontraron datos en el archivo. Verificá que completaste la hoja "Balance".');
+        return;
+      }
+      // Keep existing meta (identification set in web form)
+      uFormData = formData;
+      const btab = document.getElementById('btabCargar');
+      switchBalTab('cargar', btab);
+      if (!pinUnlocked) {
+        document.getElementById('pinGate').style.display='flex';
+        document.getElementById('uploadForm').style.display='none';
+        alert('Ingresá el PIN para continuar.');
+        return;
+      }
+      document.getElementById('pinGate').style.display='none';
+      document.getElementById('uploadForm').style.display='block';
+      renderManualForm();
+      setStatus('Excel importado · '+Object.keys(formData).length+' campos cargados. Completá identificación y guardá.','green');
+    } catch(err) { alert('Error al leer el Excel: '+err.message); console.error(err); }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 // ── GITHUB SYNC ──────────────────────────────────────────────────────────────
