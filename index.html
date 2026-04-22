@@ -1146,6 +1146,57 @@ function deriveAnualfromQ4(co, year) {
 function calcQ4(co, year) { return deriveQ4fromAnual(co, year); }
 
 
+
+// ── RE-DERIVE ALL PERIODS ─────────────────────────────────────────────────────
+function rederiveAll() {
+  const db = balGetAll();
+  // Group by company+year
+  const groups = {};
+  Object.keys(db).forEach(k => {
+    const [co, year, q] = k.split('||');
+    const gk = co + '||' + year;
+    if (!groups[gk]) groups[gk] = {co, year, qs: []};
+    groups[gk].qs.push(q);
+  });
+
+  let count = 0;
+  Object.values(groups).forEach(({co, year, qs}) => {
+    const hasAnual = qs.includes('Anual');
+    const hasQ4    = qs.includes('Q4');
+    const hasQ1    = qs.includes('Q1');
+    const hasQ2    = qs.includes('Q2');
+    const hasQ3    = qs.includes('Q3');
+
+    // If we have Anual + Q1+Q2+Q3 → re-derive Q4
+    if (hasAnual && hasQ1 && hasQ2 && hasQ3) {
+      const derived = deriveQ4fromAnual(co, year);
+      if (derived) {
+        db[balKey(co, year, 'Q4')] = {...derived, _ts: Date.now(), _derived: true};
+        count++;
+        console.log('Re-derived Q4 for', co, year);
+      }
+    }
+    // If we have Q4 + Q1+Q2+Q3 → re-derive Anual
+    if (hasQ4 && hasQ1 && hasQ2 && hasQ3 && !hasAnual) {
+      const derived = deriveAnualfromQ4(co, year);
+      if (derived) {
+        db[balKey(co, year, 'Anual')] = {...derived, _ts: Date.now(), _derived: true};
+        count++;
+        console.log('Re-derived Anual for', co, year);
+      }
+    }
+  });
+
+  if (count > 0) {
+    balSave(db);
+    ghSaveBalances().then(ok => console.log(ok ? 'GH: sync ok' : 'GH: local only'));
+    renderBalTree();
+    alert(count + ' período(s) re-derivado(s) correctamente.');
+  } else {
+    alert('No se encontraron períodos para re-derivar. Verificá que tengas Q1+Q2+Q3 y Anual (o Q4) cargados.');
+  }
+}
+
 // ── Tree renderer ─────────────────────────────────────────────────────────────
 function renderBalTree() {
   const db = balGetAll();
