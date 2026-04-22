@@ -2365,8 +2365,7 @@ function renderAll(company) {
     document.getElementById('rChange').innerHTML =
       `<span class="${pos?'pos':'neg'}">${pos?'+':''}${change.toFixed(2)} (${pos?'+':''}${changePct?.toFixed(2)}%)</span>${dateLbl}`;
   }
-  document.getElementById('rPriceMeta').textContent =
-    `${isCached ? `Caché: hace ${cacheAge < 60 ? cacheAge+'min' : Math.round(cacheAge/60)+'h'}` : 'En vivo'} · ${company.currency==='ARS'?'Reporta en ARS':'Reporta en USD'}`;
+  document.getElementById('rPriceMeta').textContent = company.currency==='ARS'?'Reporta en ARS':'Reporta en USD';
 
   if (company.currency === 'ARS' && currentCurrency === 'usd') {
     document.getElementById('fxStatus').textContent = `FX: ARS→USD · flujos / FX promedio · stocks / FX cierre`;
