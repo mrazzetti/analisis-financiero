@@ -1761,7 +1761,8 @@ function importFromExcel(event) {
       const ws = wb.Sheets['Balance'];
       if (!ws) { alert('No se encontró la hoja "Balance" en el archivo.'); return; }
       const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-      const calcKeys = new Set(['gross_profit','ebitda_calc','fin_net','fcf',
+      // Skip purely auto-calculated display fields; gross_profit is editable
+      const calcKeys = new Set(['ebitda_calc','fin_net','fcf',
         'total_assets','total_liab','net_debt','total_debt','net_debt_d']);
       const formData = {};
       rows.forEach(function(row) {
