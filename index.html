@@ -2360,8 +2360,10 @@ function renderAll(company) {
   document.getElementById('rPrice').textContent = price ? `$${price.toFixed(2)}` : '—';
   if (change !== null) {
     const pos = change >= 0;
+    const priceDate = quoteGetMeta(company.ticker)?.date || '';
+    const dateLbl = priceDate ? ` <span style="color:var(--text3);font-size:11px;font-weight:400">${priceDate}</span>` : '';
     document.getElementById('rChange').innerHTML =
-      `<span class="${pos?'pos':'neg'}">${pos?'+':''}${change.toFixed(2)} (${pos?'+':''}${changePct?.toFixed(2)}%)</span>`;
+      `<span class="${pos?'pos':'neg'}">${pos?'+':''}${change.toFixed(2)} (${pos?'+':''}${changePct?.toFixed(2)}%)</span>${dateLbl}`;
   }
   document.getElementById('rPriceMeta').textContent =
     `${isCached ? `Caché: hace ${cacheAge < 60 ? cacheAge+'min' : Math.round(cacheAge/60)+'h'}` : 'En vivo'} · ${company.currency==='ARS'?'Reporta en ARS':'Reporta en USD'}`;
