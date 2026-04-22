@@ -621,11 +621,7 @@ body.dark {
         <option value="Q3">Q3</option>
         <option value="Q4">Q4</option>
       </select>
-      <span class="toggle-label" style="margin-left:8px">Moneda:</span>
-      <div class="toggle-group">
-        <button class="tg-btn active" onclick="setCurrency('usd',this)">USD</button>
-        <button class="tg-btn" onclick="setCurrency('ars',this)">ARS orig.</button>
-      </div>
+      <span style="font-size:12px;font-weight:500;color:var(--text3)">USD</span>
     </div>
 
     <div class="tabs">
@@ -636,7 +632,7 @@ body.dark {
       <div class="tab" onclick="swTab('rt',this)">Ratios</div>
       <div class="tab" onclick="swTab('dcf',this)">DCF</div>
       <div class="tab" onclick="swTab('ons',this)">ONs / Deuda</div>
-      <div class="tab" onclick="swTab('cache',this)">Base de datos</div>
+      
     </div>
 
     <div class="section active" id="ov"></div>
@@ -646,8 +642,7 @@ body.dark {
     <div class="section" id="rt"></div>
     <div class="section" id="dcf"></div>
     <div class="section" id="ons"></div>
-    <div class="section" id="cache"></div>
-  </div>
+    </div>
 </div>
 </div><!-- /analysis-view -->
 
@@ -750,7 +745,7 @@ let currentCompany = null;
 let currentPeriod = 'annual';   // 'annual' | 'quarterly'
 let selectedYear    = '';          // filter by year, '' = all
 let selectedQuarter = '';          // filter by quarter, '' = all
-let currentCurrency = 'usd';    // 'usd' | 'ars'
+const currentCurrency = 'usd';    // 'usd' | 'ars'
 let fetchedData = {};
 let fxRates = {};               // { '2024': { avg: 950, eop: 1031 }, ... }
 let chartInstances = {};
@@ -1787,14 +1782,115 @@ async function ghSaveBalances(){
   }catch(e){console.warn('GH save:',e.message);return false;}
 }
 
+const QUOTE_CACHE_KEY = 'analisisarg_quote_v1';
+
+function quoteGet(ticker) {
+  // Always returns last known price — never expires
+  try {
+    const db = JSON.parse(localStorage.getItem(QUOTE_CACHE_KEY)||'{}');
+    return db[ticker]?.data || null;
+  } catch { return null; }
+}
+function quoteSet(ticker, data) {
+  // Always overwrites with latest price from AV
+  try {
+    const db = JSON.parse(localStorage.getItem(QUOTE_CACHE_KEY)||'{}');
+    const q = data['Global Quote'] || {};
+    db[ticker] = {
+      ts:    Date.now(),
+      price: q['05. price'] || null,
+      date:  q['07. latest trading day'] || null,
+      data,
+    };
+    localStorage.setItem(QUOTE_CACHE_KEY, JSON.stringify(db));
+  } catch {}
+}
+function quoteGetMeta(ticker) {
+  // Returns {price, date, ts} for display
+  try {
+    const db = JSON.parse(localStorage.getItem(QUOTE_CACHE_KEY)||'{}');
+    const e = db[ticker];
+    return e ? { price: e.price, date: e.date, ts: e.ts } : null;
+  } catch { return null; }
+}
+
+
+async function enrichWithPrice(company, data) {
+  // Skip if mkt_cap already in balance
+  const db = balGetAll();
+  const prefix = company.name + '||';
+  const hasLocalMktCap = Object.keys(db)
+    .filter(k => k.startsWith(prefix))
+    .some(k => db[k].mkt_cap);
+  if (hasLocalMktCap) return;
+
+  // Always try fresh price from AV, fall back to last stored
+  let quote = null;
+  try {
+    quote = await avFetch('GLOBAL_QUOTE', `symbol=${company.ticker}`);
+    if (quote?.['Global Quote']?.['05. price'] !== undefined) {
+      quoteSet(company.ticker, quote); // overwrites with latest
+      console.log(`AV: precio actualizado para ${company.ticker}`);
+    } else {
+      quote = null;
+    }
+  } catch(e) {
+    console.warn('AV quote fetch failed, using stored price:', e.message);
+    quote = quoteGet(company.ticker); // use last known
+  }
+
+  if (!quote) return;
+  const q = quote['Global Quote'] || {};
+  const price = parseFloat(q['05. price']);
+  if (!price || isNaN(price)) return;
+
+  // Get shares outstanding from overview if cached
+  let shares = null;
+  const cached = cacheGet(company.ticker);
+  if (cached?.overview) {
+    shares = parseFloat(cached.overview.SharesOutstanding);
+  }
+
+  // Inject into data.quote
+  data.quote = quote;
+
+  // Also update overview with computed market ratios
+  if (data.overview && shares && !isNaN(shares)) {
+    const mktCap = price * shares;
+    data.overview.MarketCapitalization = String(mktCap);
+    data.overview['52WeekHigh'] = q['03. high'] || 'None';
+    data.overview['52WeekLow']  = q['04. low']  || 'None';
+
+    // Recompute price-dependent ratios
+    const ni  = parseFloat(data.overview._ni  || '0');
+    const eq  = parseFloat(data.overview._eq  || '0');
+    const nd  = parseFloat(data.overview._nd  || '0');
+    const eb  = parseFloat(data.overview._eb  || '0');
+    const rev = parseFloat(data.overview._rev || '0');
+    if (ni > 0)  data.overview.PERatio          = String(mktCap / ni);
+    if (eq > 0)  data.overview.PriceToBookRatio = String(mktCap / eq);
+    if (eb > 0)  data.overview.EVToEBITDA       = String((mktCap + nd) / eb);
+    if (rev > 0) data.overview.EVToRevenue      = String((mktCap + nd) / rev);
+  }
+}
+
 async function fetchAllData(company) {
   setLoading('Buscando balance...');
 
   // Check manual balances
   const manualData = buildFromManualBalances(company);
   if (manualData) {
-    setStatus(`${company.name} · Balance manual`, 'green');
     setLoading('');
+    // Try to enrich with live price from AV (non-blocking)
+    enrichWithPrice(company, manualData).then(() => {
+      setStatus(`${company.name} · Balance manual`, 'green');
+      renderAll(company);
+    });
+    const _qm = quoteGetMeta(company.ticker);
+    const _priceInfo = _qm?.price
+      ? ` · Precio: $${parseFloat(_qm.price).toFixed(2)} (${_qm.date || 'última cotización'})`
+      : '';
+    setStatus(`${company.name} · Balance manual${_priceInfo}`, 'green');
     return manualData;
   }
 
@@ -1870,6 +1966,31 @@ function buildFromManualBalances(company) {
   const latest = annuals[0] || quarters[0];
   const d = calcDerived(latest.data);
   const m = mult(latest);
+  // Calculate ratios from latest balance data
+  const _d   = calcDerived(latest.data);
+  const _m   = latest.data._unidad==='Miles' ? 1e3 : latest.data._unidad==='Millones' ? 1e6 : 1;
+  const _rev  = _d.revenue   ? _d.revenue   * _m : null;
+  const _ni   = _d.net_income? _d.net_income* _m : null;
+  const _ebit = _d.ebit      ? _d.ebit      * _m : null;
+  const _da   = _d.da        ? Math.abs(_d.da * _m) : null;
+  const _ebitda = (_ebit!==null&&_da!==null) ? _ebit+_da : null;
+  const _eq   = _d.equity    ? _d.equity    * _m : null;
+  const _ta   = _d.total_assets ? _d.total_assets * _m : null;
+  const _mktcap = latest.data.mkt_cap ? latest.data.mkt_cap * 1e6 : null;
+  const _nd   = _d.net_debt  ? _d.net_debt  * _m : null;
+
+  const _roe      = (_ni&&_eq&&_eq!==0)          ? String(_ni/_eq)                : 'None';
+  const _roa      = (_ni&&_ta&&_ta!==0)          ? String(_ni/_ta)                : 'None';
+  const _profMgn  = (_ni&&_rev&&_rev!==0)        ? String(_ni/_rev)               : 'None';
+  const _opMgn    = (_ebit&&_rev&&_rev!==0)      ? String(_ebit/_rev)             : 'None';
+  const _evEbitda = (_mktcap&&_nd!==null&&_ebitda&&_ebitda!==0)
+                    ? String((_mktcap+_nd)/_ebitda)                                : 'None';
+  const _pe       = (_mktcap&&_ni&&_ni>0)        ? String(_mktcap/_ni)            : 'None';
+  const _pbv      = (_mktcap&&_eq&&_eq>0)        ? String(_mktcap/_eq)            : 'None';
+  const _evRev    = (_mktcap&&_nd!==null&&_rev&&_rev!==0)
+                    ? String((_mktcap+_nd)/_rev)                                   : 'None';
+  const _mktCapStr= _mktcap ? String(_mktcap) : 'None';
+
   const overview = {
     Symbol:       company.ticker,
     Name:         company.name,
@@ -1877,12 +1998,24 @@ function buildFromManualBalances(company) {
     Industry:     '',
     Country:      'Argentina',
     Currency:     latest.data._moneda || 'USD',
-    MarketCapitalization: 'None',
-    PERatio: 'None', ForwardPE: 'None', PriceToBookRatio: 'None',
-    EVToEBITDA: 'None', EVToRevenue: 'None', Beta: 'None',
-    ReturnOnEquityTTM: 'None', ReturnOnAssetsTTM: 'None',
-    ProfitMargin: 'None', OperatingMarginTTM: 'None',
+    MarketCapitalization: _mktCapStr,
+    PERatio:              _pe,
+    ForwardPE:            'None',
+    PriceToBookRatio:     _pbv,
+    EVToEBITDA:           _evEbitda,
+    EVToRevenue:          _evRev,
+    Beta:                 'None',
+    ReturnOnEquityTTM:    _roe,
+    ReturnOnAssetsTTM:    _roa,
+    ProfitMargin:         _profMgn,
+    OperatingMarginTTM:   _opMgn,
     Description: `Balance cargado manualmente. Moneda: ${latest.data._moneda||'USD'} ${latest.data._unidad||'Millones'}. Tipo: ${latest.data._cons||'Consolidado'}.`,
+    // Internal values for price-dependent ratio computation
+    _ni:  String(_ni  || 0),
+    _eq:  String(_eq  || 0),
+    _nd:  String(_nd  || 0),
+    _eb:  String(_ebitda || 0),
+    _rev: String(_rev  || 0),
   };
 
   // Quote stub (no price available)
@@ -2043,14 +2176,6 @@ function resetSearch() {
   if (ySel) ySel.innerHTML = '<option value="">— Año —</option>';
   const qSel = document.getElementById('quarterSelect');
   if (qSel) qSel.value = 'annual';
-}
-
-function setCurrency(c, el) {
-  currentCurrency = c;
-  document.querySelectorAll('.toggle-group')[1].querySelectorAll('.tg-btn')
-    .forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
-  if (currentCompany) renderAll(currentCompany);
 }
 
 // ── REPORTS HELPER ────────────────────────────────────────────────────────────
@@ -3058,7 +3183,6 @@ const LANG = {
     period_annual: 'Anual',
     period_quarterly: 'Trimestral',
     currency_usd: 'USD',
-    currency_ars: 'ARS orig.',
     tab_overview: 'Overview',
     tab_is: 'Income Statement',
     tab_bs: 'Balance Sheet',
@@ -3066,7 +3190,6 @@ const LANG = {
     tab_ratios: 'Ratios',
     tab_dcf: 'DCF',
     tab_ons: 'ONs / Deuda',
-    tab_cache: 'Base de datos',
     comp_title: 'Comparador de empresas',
     comp_sub: 'Compará hasta 3 empresas entre sí y contra el benchmark del sector GICS',
     comp_select: 'Seleccioná las empresas a comparar',
@@ -3095,7 +3218,6 @@ const LANG = {
     period_annual: 'Annual',
     period_quarterly: 'Quarterly',
     currency_usd: 'USD',
-    currency_ars: 'ARS orig.',
     tab_overview: 'Overview',
     tab_is: 'Income Statement',
     tab_bs: 'Balance Sheet',
@@ -3103,7 +3225,6 @@ const LANG = {
     tab_ratios: 'Ratios',
     tab_dcf: 'DCF',
     tab_ons: 'Bonds / Debt',
-    tab_cache: 'Database',
     comp_title: 'Company comparator',
     comp_sub: 'Compare up to 3 companies against each other and vs. GICS sector benchmark',
     comp_select: 'Select companies to compare',
@@ -3160,7 +3281,7 @@ function applyLang() {
   // Analysis tabs
   const tabMap = {
     ov:'Overview', is:'Income Statement', bs:'Balance Sheet',
-    cf:'Cash Flow', rt:'Ratios', dcf:'DCF', ons:'ONs / Deuda', is2:'Base de datos'
+    cf:'Cash Flow', rt:'Ratios', dcf:'DCF', ons:'ONs / Deuda'
   };
   document.querySelectorAll('.tab[onclick]').forEach(tab => {
     const match = tab.getAttribute('onclick').match(/swTab\('(\w+)'/);
