@@ -1844,11 +1844,26 @@ async function enrichWithPrice(company, data) {
   const price = parseFloat(q['05. price']);
   if (!price || isNaN(price)) return;
 
-  // Get shares outstanding from overview if cached
+  // Get shares outstanding — try cache first, then fetch from AV
   let shares = null;
   const cached = cacheGet(company.ticker);
-  if (cached?.overview) {
+  if (cached?.overview?.SharesOutstanding) {
     shares = parseFloat(cached.overview.SharesOutstanding);
+  } else {
+    // Fetch OVERVIEW from AV to get shares outstanding
+    try {
+      const ov = await avFetch('OVERVIEW', `symbol=${company.ticker}`);
+      if (ov?.SharesOutstanding && ov.SharesOutstanding !== 'None') {
+        shares = parseFloat(ov.SharesOutstanding);
+        // Cache it
+        const db2 = cacheGetAll();
+        if (!db2[company.ticker]) db2[company.ticker] = { ts: Date.now(), data: {} };
+        db2[company.ticker].overview = ov;
+        localStorage.setItem(CACHE_KEY, JSON.stringify(db2));
+      }
+    } catch(e) {
+      console.warn('AV overview fetch failed:', e.message);
+    }
   }
 
   // Inject into data.quote
@@ -3144,6 +3159,27 @@ function renderQuickBtns() {
 }
 renderQuickBtns();
 
+
+
+// ── CLEAR OLD SEED DATA (one-time cleanup) ──────────────────────────────────
+(function clearOldSeed() {
+  try {
+    const SEED_CLEARED = 'arg_seed_cleared_v1';
+    if (localStorage.getItem(SEED_CLEARED)) return;
+    // Remove known seed keys
+    const db = JSON.parse(localStorage.getItem('arg_balances_v2') || '{}');
+    const seedKeys = Object.keys(db).filter(k =>
+      (k.startsWith('YPF S.A.||') || k.startsWith('Vista Energy||')) &&
+      db[k]._ts && db[k]._ts < 1700100000000  // seed timestamp marker
+    );
+    if (seedKeys.length > 0) {
+      seedKeys.forEach(k => delete db[k]);
+      localStorage.setItem('arg_balances_v2', JSON.stringify(db));
+      console.log(`Cleaned ${seedKeys.length} seed entries`);
+    }
+    localStorage.setItem(SEED_CLEARED, '1');
+  } catch(e) {}
+})();
 
 // ── THEME & LANG INIT ─────────────────────────────────────────────────────────
 (function initPrefs() {
