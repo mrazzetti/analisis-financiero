@@ -1815,6 +1815,29 @@ function quoteGetMeta(ticker) {
 }
 
 
+
+// ── SHARES OUTSTANDING (millones) ────────────────────────────────────────────
+// Fuente: reportes anuales / SEC filings (aprox.)
+const SHARES_M = {
+  YPF:   393,   // YPF S.A. ADRs
+  VIST:  120,   // Vista Energy
+  PAM:   330,   // Pampa Energía
+  CEPU:  1560,  // Central Puerto
+  TGS:   794,   // TGS
+  LOMA:  594,   // Loma Negra
+  GGAL:  340,   // Galicia (ADRs)
+  BMA:   639,   // Banco Macro
+  SUPV:  247,   // Supervielle
+  BBAR:  612,   // BBVA Argentina
+  CRESY: 90,    // Cresud
+  IRS:   56,    // IRSA
+  EDN:   906,   // Edenor
+  MELI:  51,    // MercadoLibre
+  GLOB:  39,    // Globant
+  DESP:  67,    // Despegar
+  ARCO:  175,   // Arcos Dorados
+};
+
 async function enrichWithPrice(company, data) {
   // Skip if mkt_cap already in balance
   const db = balGetAll();
@@ -1824,19 +1847,30 @@ async function enrichWithPrice(company, data) {
     .some(k => db[k].mkt_cap);
   if (hasLocalMktCap) return;
 
-  // Always try fresh price from AV, fall back to last stored
+  // Only call AV if we don't have today's closing price
   let quote = null;
-  try {
-    quote = await avFetch('GLOBAL_QUOTE', `symbol=${company.ticker}`);
-    if (quote?.['Global Quote']?.['05. price'] !== undefined) {
-      quoteSet(company.ticker, quote); // overwrites with latest
-      console.log(`AV: precio actualizado para ${company.ticker}`);
-    } else {
-      quote = null;
+  const stored = quoteGet(company.ticker);
+  const storedDate = stored?.['Global Quote']?.['07. latest trading day'] || '';
+  const today = new Date().toISOString().slice(0,10);
+  const yesterday = new Date(Date.now()-864e5).toISOString().slice(0,10);
+  const hasRecentPrice = storedDate === today || storedDate === yesterday;
+
+  if (hasRecentPrice) {
+    quote = stored;
+    console.log(`AV: usando precio guardado para ${company.ticker} (${storedDate})`);
+  } else {
+    try {
+      quote = await avFetch('GLOBAL_QUOTE', `symbol=${company.ticker}`);
+      if (quote?.['Global Quote']?.['05. price'] !== undefined) {
+        quoteSet(company.ticker, quote);
+        console.log(`AV: precio actualizado para ${company.ticker} (${quote['Global Quote']['07. latest trading day']})`);
+      } else {
+        quote = stored; // fall back to last known
+      }
+    } catch(e) {
+      console.warn('AV quote: usando precio guardado:', e.message);
+      quote = stored;
     }
-  } catch(e) {
-    console.warn('AV quote fetch failed, using stored price:', e.message);
-    quote = quoteGet(company.ticker); // use last known
   }
 
   if (!quote) return;
@@ -1844,25 +1878,27 @@ async function enrichWithPrice(company, data) {
   const price = parseFloat(q['05. price']);
   if (!price || isNaN(price)) return;
 
-  // Get shares outstanding — try cache first, then fetch from AV
+  // Get shares outstanding — table first, then cache, then AV
   let shares = null;
-  const cached = cacheGet(company.ticker);
-  if (cached?.overview?.SharesOutstanding) {
-    shares = parseFloat(cached.overview.SharesOutstanding);
+  if (SHARES_M[company.ticker]) {
+    shares = SHARES_M[company.ticker] * 1e6; // convert to absolute
   } else {
-    // Fetch OVERVIEW from AV to get shares outstanding
-    try {
-      const ov = await avFetch('OVERVIEW', `symbol=${company.ticker}`);
-      if (ov?.SharesOutstanding && ov.SharesOutstanding !== 'None') {
-        shares = parseFloat(ov.SharesOutstanding);
-        // Cache it
-        const db2 = cacheGetAll();
-        if (!db2[company.ticker]) db2[company.ticker] = { ts: Date.now(), data: {} };
-        db2[company.ticker].overview = ov;
-        localStorage.setItem(CACHE_KEY, JSON.stringify(db2));
+    const cached = cacheGet(company.ticker);
+    if (cached?.overview?.SharesOutstanding) {
+      shares = parseFloat(cached.overview.SharesOutstanding);
+    } else {
+      try {
+        const ov = await avFetch('OVERVIEW', `symbol=${company.ticker}`);
+        if (ov?.SharesOutstanding && ov.SharesOutstanding !== 'None') {
+          shares = parseFloat(ov.SharesOutstanding);
+          const db2 = cacheGetAll();
+          if (!db2[company.ticker]) db2[company.ticker] = { ts: Date.now(), data: {} };
+          db2[company.ticker].overview = ov;
+          localStorage.setItem(CACHE_KEY, JSON.stringify(db2));
+        }
+      } catch(e) {
+        console.warn('AV overview fetch failed:', e.message);
       }
-    } catch(e) {
-      console.warn('AV overview fetch failed:', e.message);
     }
   }
 
