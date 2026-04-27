@@ -1094,6 +1094,7 @@ function inflationAdj(val, fromQ, year, moneda) {
 
 function deriveQ4fromAnual(co, year) {
   const db = balGetAll();
+  // Accept either 'Anual' or a manually-entered 'Q4' as the annual base
   const anual = db[balKey(co, year, 'Anual')];
   const q1 = db[balKey(co, year, 'Q1')];
   const q2 = db[balKey(co, year, 'Q2')];
@@ -1149,9 +1150,14 @@ function rederiveAll() {
     const hasQ1 = qs.includes('Q1'), hasQ2 = qs.includes('Q2'), hasQ3 = qs.includes('Q3');
     const hasQ4 = qs.includes('Q4'), hasAnual = qs.includes('Anual');
     if (hasAnual && hasQ1 && hasQ2 && hasQ3) {
-      const d = deriveQ4fromAnual(co, year);
-      if (d) { db[balKey(co,year,'Q4')] = {...d, _ts:Date.now(), _derived:true}; count++; }
-    } else if (hasQ4 && hasQ1 && hasQ2 && hasQ3 && !hasAnual) {
+      // Only overwrite Q4 if it doesn't exist or is already derived
+      const existingQ4 = db[balKey(co,year,'Q4')];
+      if (!existingQ4 || existingQ4._derived) {
+        const d = deriveQ4fromAnual(co, year);
+        if (d) { db[balKey(co,year,'Q4')] = {...d, _ts:Date.now(), _derived:true}; count++; }
+      }
+    }
+    if (hasQ4 && hasQ1 && hasQ2 && hasQ3 && !hasAnual) {
       const d = deriveAnualfromQ4(co, year);
       if (d) { db[balKey(co,year,'Anual')] = {...d, _ts:Date.now(), _derived:true}; count++; }
     }
@@ -1224,7 +1230,12 @@ function viewBalance(key) {
   const [co,year,q] = key.split('||');
   const data = calcDerived(entry);
   // Switch to ver tab and render there
-  switchBalTab('ver', document.getElementById('btabVer'));
+  // Show ver tab first
+  ['balTabVer','balTabCargar','balTabIPC'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.style.display='none';
+  });
+  document.querySelectorAll('.bal-tab').forEach(function(t){t.classList.remove('active');});
+  var btVer=document.getElementById('btabVer'); if(btVer) btVer.classList.add('active');
   const detail = document.getElementById('balTabVer');
   if (!detail) return;
   detail.style.display = '';
@@ -2132,13 +2143,27 @@ function buildFromManualBalances(company) {
   const annualReports = _annDeduped.map(toReport);
 
   // Quarterly: Q1/Q2/Q3 from quarters + Q4 from annuals (deduplicated per year)
+  // For quarterly view: include Q4 or Anual (treated as Q4) per year, prefer Q4 over Anual, prefer manual over derived
   const _q4ByYr = {};
-  annuals.filter(function(e){return e.q==='Q4';}).forEach(function(e){
-    if (!_q4ByYr[e.year] || _q4ByYr[e.year].data._derived) _q4ByYr[e.year] = e;
+  annuals.forEach(function(e) {
+    const yr = e.year;
+    const existing = _q4ByYr[yr];
+    if (!existing) { _q4ByYr[yr] = e; return; }
+    // Prefer Q4 over Anual, prefer manual over derived
+    const existingIsQ4 = existing.q === 'Q4';
+    const newIsQ4 = e.q === 'Q4';
+    if (newIsQ4 && !existingIsQ4) { _q4ByYr[yr] = e; return; }
+    if (existingIsQ4 === newIsQ4 && existing.data._derived && !e.data._derived) { _q4ByYr[yr] = e; }
   });
   const quarterlyReports = [
     ...quarters.map(toReport),
-    ...Object.values(_q4ByYr).map(toReport)
+    ...Object.values(_q4ByYr).map(function(e){
+      // Force fiscalDateEnding to Q4 (December) regardless of Anual vs Q4
+      var rep = toReport(e);
+      var yr = String(e.year);
+      rep.fiscalDateEnding = yr + '-12-31';
+      return rep;
+    })
   ].sort(function(a,b){return a.fiscalDateEnding < b.fiscalDateEnding ? -1 : 1;}).slice(0,12);
 
   // Overview stub from company info
