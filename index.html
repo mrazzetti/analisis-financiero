@@ -541,7 +541,7 @@ body.dark {
     <div class="bal-tree-wrap">
       <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
         <input class="bal-search" id="balSearch" placeholder="Buscar empresa..." oninput="filterBalTree(this.value)" style="flex:1">
-        <button onclick="rederiveAll()" class="gb" style="font-size:11px;padding:4px 10px;white-space:nowrap" title="Re-calcula Q4/Anual desde trimestres">↻ Re-derivar</button>
+        <button onclick="rederiveAll()" class="gb" style="font-size:11px;padding:4px 10px;white-space:nowrap">↻ Re-derivar</button>
       </div>
       <div id="balTree"><div class="bal-empty-tree">Todavía no hay balances cargados.<br>Usá "Cargar balance" para agregar el primero.</div></div>
     </div>
@@ -1085,114 +1085,128 @@ function calcDerived(data) {
 }
 
 // ── Calculate Q4 from Annual - Q1adj - Q2adj - Q3adj ──────────────────────────
-// ── Period derivation helpers ──────────────────────────────────────────────────
 function inflationAdj(val, fromQ, year, moneda) {
-  if (!val || isNaN(parseFloat(val))) return 0;
+  if (val === null || val === undefined || isNaN(parseFloat(val))) return 0;
   if (moneda !== 'ARS') return parseFloat(val);
   const f = ipcFactor(year, fromQ, year, 'Q4');
   return f ? parseFloat(val) * f : parseFloat(val);
 }
+
 function deriveQ4fromAnual(co, year) {
   const db = balGetAll();
-  const anual = db[balKey(co,year,'Anual')] || db[balKey(co,year,'Q4')];
-  const q1=db[balKey(co,year,'Q1')], q2=db[balKey(co,year,'Q2')], q3=db[balKey(co,year,'Q3')];
-  if (!anual||!q1||!q2||!q3) return null;
-  const moneda = anual._moneda||'USD', result={};
-  Object.keys(anual).forEach(k=>{
-    if(k.startsWith('_')){result[k]=anual[k];return;}
-    if(STOCK_FIELDS.has(k)){result[k]=anual[k];return;}
-    const a=parseFloat(anual[k]); if(isNaN(a)) return;
-    result[k]=a-inflationAdj(q1[k],'Q1',year,moneda)-inflationAdj(q2[k],'Q2',year,moneda)-inflationAdj(q3[k],'Q3',year,moneda);
+  const anual = db[balKey(co, year, 'Anual')];
+  const q1 = db[balKey(co, year, 'Q1')];
+  const q2 = db[balKey(co, year, 'Q2')];
+  const q3 = db[balKey(co, year, 'Q3')];
+  if (!anual || !q1 || !q2 || !q3) return null;
+  const moneda = anual._moneda || 'USD';
+  const result = {};
+  Object.keys(anual).forEach(k => {
+    if (k.startsWith('_')) { result[k] = anual[k]; return; }
+    if (STOCK_FIELDS.has(k)) { result[k] = anual[k]; return; } // stock: Q4 = Anual
+    const a = parseFloat(anual[k]); if (isNaN(a)) return;
+    result[k] = a
+      - inflationAdj(q1[k], 'Q1', year, moneda)
+      - inflationAdj(q2[k], 'Q2', year, moneda)
+      - inflationAdj(q3[k], 'Q3', year, moneda);
   });
   return result;
 }
+
 function deriveAnualfromQ4(co, year) {
   const db = balGetAll();
-  const q4=db[balKey(co,year,'Q4')];
-  const q1=db[balKey(co,year,'Q1')], q2=db[balKey(co,year,'Q2')], q3=db[balKey(co,year,'Q3')];
-  if (!q4||!q1||!q2||!q3) return null;
-  const moneda = q4._moneda||'USD', result={};
-  Object.keys(q4).forEach(k=>{
-    if(k.startsWith('_')){result[k]=q4[k];return;}
-    if(STOCK_FIELDS.has(k)){result[k]=q4[k];return;}
-    result[k]=inflationAdj(q1[k],'Q1',year,moneda)+inflationAdj(q2[k],'Q2',year,moneda)+inflationAdj(q3[k],'Q3',year,moneda)+inflationAdj(q4[k],'Q4',year,moneda);
+  const q4 = db[balKey(co, year, 'Q4')];
+  const q1 = db[balKey(co, year, 'Q1')];
+  const q2 = db[balKey(co, year, 'Q2')];
+  const q3 = db[balKey(co, year, 'Q3')];
+  if (!q4 || !q1 || !q2 || !q3) return null;
+  const moneda = q4._moneda || 'USD';
+  const result = {};
+  Object.keys(q4).forEach(k => {
+    if (k.startsWith('_')) { result[k] = q4[k]; return; }
+    if (STOCK_FIELDS.has(k)) { result[k] = q4[k]; return; } // stock: Anual = Q4
+    result[k] = inflationAdj(q1[k], 'Q1', year, moneda)
+              + inflationAdj(q2[k], 'Q2', year, moneda)
+              + inflationAdj(q3[k], 'Q3', year, moneda)
+              + inflationAdj(q4[k], 'Q4', year, moneda);
   });
   return result;
 }
-function calcQ4(co,year){return deriveQ4fromAnual(co,year);}
 
-// ── Re-derive all ─────────────────────────────────────────────────────────────
+function calcQ4(co, year) { return deriveQ4fromAnual(co, year); }
+
 function rederiveAll() {
-  const db=balGetAll();
-  const groups={};
-  Object.keys(db).forEach(k=>{
-    const [co,year,q]=k.split('||');
-    const gk=co+'||'+year;
-    if(!groups[gk]) groups[gk]={co,year,qs:[]};
-    groups[gk].qs.push(q);
+  const db = balGetAll();
+  const groups = {};
+  Object.keys(db).forEach(k => {
+    const [co, year] = k.split('||');
+    const gk = co + '||' + year;
+    if (!groups[gk]) groups[gk] = { co, year, qs: [] };
+    groups[gk].qs.push(k.split('||')[2]);
   });
-  let count=0;
-  Object.values(groups).forEach(({co,year,qs})=>{
-    const hasAnual=qs.includes('Anual'), hasQ4=qs.includes('Q4');
-    const hasQ1=qs.includes('Q1'), hasQ2=qs.includes('Q2'), hasQ3=qs.includes('Q3');
-    if(hasAnual&&hasQ1&&hasQ2&&hasQ3){
-      const d=deriveQ4fromAnual(co,year);
-      if(d){db[balKey(co,year,'Q4')]={...d,_ts:Date.now(),_derived:true};count++;}
-    }
-    if(hasQ4&&hasQ1&&hasQ2&&hasQ3&&!hasAnual){
-      const d=deriveAnualfromQ4(co,year);
-      if(d){db[balKey(co,year,'Anual')]={...d,_ts:Date.now(),_derived:true};count++;}
+  let count = 0;
+  Object.values(groups).forEach(({ co, year, qs }) => {
+    const hasQ1 = qs.includes('Q1'), hasQ2 = qs.includes('Q2'), hasQ3 = qs.includes('Q3');
+    const hasQ4 = qs.includes('Q4'), hasAnual = qs.includes('Anual');
+    if (hasAnual && hasQ1 && hasQ2 && hasQ3) {
+      const d = deriveQ4fromAnual(co, year);
+      if (d) { db[balKey(co,year,'Q4')] = {...d, _ts:Date.now(), _derived:true}; count++; }
+    } else if (hasQ4 && hasQ1 && hasQ2 && hasQ3 && !hasAnual) {
+      const d = deriveAnualfromQ4(co, year);
+      if (d) { db[balKey(co,year,'Anual')] = {...d, _ts:Date.now(), _derived:true}; count++; }
     }
   });
-  if(count>0){
+  if (count > 0) {
     balSave(db);
-    ghSaveBalances().then(ok=>console.log(ok?'GH:ok':'GH:local'));
+    ghSaveBalances().then(ok => console.log(ok ? 'GH:ok' : 'GH:local'));
     renderBalTree();
-    alert(count+' período(s) re-derivado(s) correctamente.');
+    alert(count + ' período(s) re-derivado(s).');
   } else {
-    alert('No se encontraron períodos para re-derivar. Necesitás Q1+Q2+Q3 y Anual (o Q4) cargados.');
+    alert('No se encontraron períodos para re-derivar. Necesitás Q1+Q2+Q3 y Anual (o Q4) del mismo año.');
   }
 }
 
 
 // ── Tree renderer ─────────────────────────────────────────────────────────────
 function renderBalTree() {
-  const db=balGetAll(), tree=document.getElementById('balTree');
-  if(!tree) return;
-  const cos={};
-  Object.entries(db).forEach(function([k,v]){
-    const parts=k.split('||'), co=parts[0], year=parts[1], q=parts[2];
-    if(!cos[co]) cos[co]={};
-    if(!cos[co][year]) cos[co][year]=[];
-    if(!cos[co][year].find(function(p){return p.q===q;})) cos[co][year].push({q:q,key:k,derived:!!v._derived});
+  const db = balGetAll();
+  const tree = document.getElementById('balTree');
+  if (!tree) return;
+  const cos = {};
+  Object.entries(db).forEach(function([k,v]) {
+    const parts = k.split('||'), co = parts[0], year = parts[1], q = parts[2];
+    if (!cos[co]) cos[co] = {};
+    if (!cos[co][year]) cos[co][year] = [];
+    if (!cos[co][year].find(function(p){return p.q===q;}))
+      cos[co][year].push({q:q, key:k, derived:!!v._derived});
   });
-  if(!Object.keys(cos).length){
-    tree.innerHTML='<div style="padding:1rem;color:var(--text3);font-size:13px;text-align:center">No hay balances cargados.</div>';
+  if (!Object.keys(cos).length) {
+    tree.innerHTML = '<div style="padding:1rem;color:var(--text3);font-size:13px;text-align:center">No hay balances cargados.</div>';
     return;
   }
-  const qOrder={Q1:1,Q2:2,Q3:3,Q4:4,Anual:5};
-  var html='';
-  Object.keys(cos).sort().forEach(function(co){
-    html+='<div class="tree-item">';
-    html+='<div class="tree-co open" onclick="toggleTreeCo(this)">';
-    html+='<span class="tree-co-icon">▶</span><span>'+co+'</span>';
-    html+='<span style="margin-left:auto;font-size:10px;color:var(--text3)">'+Object.keys(cos[co]).length+' año(s)</span>';
-    html+='</div><div class="tree-years open">';
-    Object.keys(cos[co]).sort().reverse().forEach(function(yr){
-      var periods=cos[co][yr].slice().sort(function(a,b){return (qOrder[a.q]||9)-(qOrder[b.q]||9);});
-      html+='<div class="tree-year open" onclick="toggleTreeYear(this)">';
-      html+='<span class="tree-year-icon">▶</span><span>'+yr+'</span></div>';
-      html+='<div class="tree-periods open">';
-      periods.forEach(function(p){
-        var style=p.derived?' style="color:var(--text3);font-style:italic"':'';
-        var label=p.q+(p.derived?' <span style="font-size:9px">(derivado)</span>':'');
-        html+='<div class="tree-period"'+style+' onclick="viewBalance('+JSON.stringify(p.key)+')">'+label+'</div>';
+  const qOrder = {Q1:1, Q2:2, Q3:3, Q4:4, Anual:5};
+  var html = '';
+  Object.keys(cos).sort().forEach(function(co) {
+    html += '<div class="tree-item">';
+    html += '<div class="tree-co" onclick="toggleTreeCo(this)">';
+    html += '<span class="tree-co-icon">▶</span><span>' + co + '</span>';
+    html += '<span style="margin-left:auto;font-size:10px;color:var(--text3)">' + Object.keys(cos[co]).length + ' año(s)</span>';
+    html += '</div><div class="tree-years">';
+    Object.keys(cos[co]).sort().reverse().forEach(function(yr) {
+      const periods = cos[co][yr].slice().sort(function(a,b){ return (qOrder[a.q]||9)-(qOrder[b.q]||9); });
+      html += '<div class="tree-year" onclick="toggleTreeYear(this)">';
+      html += '<span class="tree-year-icon">▶</span><span>' + yr + '</span></div>';
+      html += '<div class="tree-periods">';
+      periods.forEach(function(p) {
+        const style = p.derived ? ' style="color:var(--text3);font-style:italic"' : '';
+        const label = p.q + (p.derived ? ' <span style="font-size:9px">(derivado)</span>' : '');
+        html += '<div class="tree-period"' + style + ' onclick="viewBalance(' + JSON.stringify(p.key) + ')">' + label + '</div>';
       });
-      html+='</div>';
+      html += '</div>';
     });
-    html+='</div></div>';
+    html += '</div></div>';
   });
-  tree.innerHTML=html;
+  tree.innerHTML = html;
 }
 
 function toggleTreeCo(el) { el.classList.toggle('open'); el.nextElementSibling.classList.toggle('open'); }
@@ -1209,9 +1223,8 @@ function viewBalance(key) {
   const db = balGetAll(); const entry = db[key]; if (!entry) return;
   const [co,year,q] = key.split('||');
   const data = calcDerived(entry);
-  // Switch to ver tab
-  const btabVer = document.getElementById('btabVer');
-  switchBalTab('ver', btabVer);
+  // Switch to ver tab and render there
+  switchBalTab('ver', document.getElementById('btabVer'));
   const detail = document.getElementById('balTabVer');
   if (!detail) return;
   detail.style.display = '';
@@ -1714,12 +1727,12 @@ function saveManualBalance() {
   const cons   = document.getElementById('fmCons')?.value;
 
   if(!co || !year || !q) { alert('Completá empresa, año y período'); return; }
-  const db0=balGetAll();
-  const qOrd={'Q1':1,'Q2':2,'Q3':3,'Q4':4,'Anual':5};
-  if(['Q2','Q3','Q4'].includes(q)){
-    const need=Object.keys(qOrd).filter(k=>qOrd[k]<qOrd[q]&&k!=='Anual');
-    const miss=need.filter(p=>!db0[balKey(co,year,p)]);
-    if(miss.length>0){alert('Para cargar '+q+' primero cargá: '+miss.join(', ')+' de '+year+'.');return;}
+  const _db0 = balGetAll();
+  const _qOrd = {Q1:1, Q2:2, Q3:3, Q4:4, Anual:5};
+  if (['Q2','Q3','Q4'].includes(q)) {
+    const _need = ['Q1','Q2','Q3'].filter(p => _qOrd[p] < _qOrd[q]);
+    const _miss = _need.filter(p => !_db0[balKey(co, year, p)]);
+    if (_miss.length) { alert('Para cargar ' + q + ' primero cargá: ' + _miss.join(', ') + ' de ' + year + '.'); return; }
   }
   // Block if balance doesn't square (with tolerance)
   const _g = k => { const v=uFormData[k]; return (v!==undefined&&v!==null&&v!=='')?parseFloat(v):null; };
@@ -1746,18 +1759,23 @@ function saveManualBalance() {
   db[key] = finalData;
   balSave(db);
 
-  // Derive complementary period
-  if(q==='Anual'){
-    const d=deriveQ4fromAnual(co,year);
-    if(d){db[balKey(co,year,'Q4')]={...d,_ts:Date.now(),_derived:true};balSave(db);}
-  } else if(q==='Q4'){
-    const d=deriveAnualfromQ4(co,year);
-    if(d){db[balKey(co,year,'Anual')]={...d,_ts:Date.now(),_derived:true};balSave(db);}
-  } else if(['Q1','Q2','Q3'].includes(q)){
-    const anual=db[balKey(co,year,'Anual')];
-    const q4=db[balKey(co,year,'Q4')];
-    if(anual&&!anual._derived){const d=deriveQ4fromAnual(co,year);if(d){db[balKey(co,year,'Q4')]={...d,_ts:Date.now(),_derived:true};balSave(db);}}
-    else if(q4&&!q4._derived){const d=deriveAnualfromQ4(co,year);if(d){db[balKey(co,year,'Anual')]={...d,_ts:Date.now(),_derived:true};balSave(db);}}
+  // Derive complementary period after save
+  if (q === 'Anual') {
+    const d = deriveQ4fromAnual(co, year);
+    if (d) { db[balKey(co,year,'Q4')] = {...d, _ts:Date.now(), _derived:true}; balSave(db); }
+  } else if (q === 'Q4') {
+    const d = deriveAnualfromQ4(co, year);
+    if (d) { db[balKey(co,year,'Anual')] = {...d, _ts:Date.now(), _derived:true}; balSave(db); }
+  } else if (['Q1','Q2','Q3'].includes(q)) {
+    const anual = db[balKey(co,year,'Anual')];
+    const q4man = db[balKey(co,year,'Q4')];
+    if (anual && !anual._derived) {
+      const d = deriveQ4fromAnual(co,year);
+      if (d) { db[balKey(co,year,'Q4')] = {...d, _ts:Date.now(), _derived:true}; balSave(db); }
+    } else if (q4man && !q4man._derived) {
+      const d = deriveAnualfromQ4(co,year);
+      if (d) { db[balKey(co,year,'Anual')] = {...d, _ts:Date.now(), _derived:true}; balSave(db); }
+    }
   }
 
   renderBalTree();
@@ -1802,34 +1820,38 @@ function switchBalTab(tab, el) {
 
 
 function importFromExcel(event) {
-  const file=event.target.files[0]; if(!file) return;
-  const reader=new FileReader();
-  reader.onload=function(ev){
-    try{
-      const wb=XLSX.read(ev.target.result,{type:'array'});
-      const ws=wb.Sheets['Balance'];
-      if(!ws){alert('No se encontró la hoja "Balance".');return;}
-      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-      const calcKeys=new Set(['ebitda_calc','fin_net','fcf','total_assets','total_liab','net_debt','total_debt','net_debt_d']);
-      const formData={};
-      rows.forEach(function(row){
-        const key=String(row[2]||'').trim();
-        const val=row[1];
-        if(!key||key.startsWith('_')||calcKeys.has(key)) return;
-        if(val===''||val===undefined||val===null) return;
-        const n=parseFloat(String(val).replace(/,/g,''));
-        if(!isNaN(n)) formData[key]=n;
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'array'});
+      const ws = wb.Sheets['Balance'];
+      if (!ws) { alert('No se encontró la hoja "Balance".'); return; }
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      const calcKeys = new Set(['ebitda_calc','fin_net','fcf','total_assets','total_liab','net_debt','total_debt','net_debt_d']);
+      const formData = {};
+      rows.forEach(function(row) {
+        const key = String(row[2]||'').trim();
+        const val = row[1];
+        if (!key || key.startsWith('_') || calcKeys.has(key)) return;
+        if (val===''||val===undefined||val===null) return;
+        const n = parseFloat(String(val).replace(/,/g,''));
+        if (!isNaN(n)) formData[key] = n;
       });
-      if(!Object.keys(formData).length){alert('No se encontraron datos. Verificá la hoja "Balance".');return;}
-      uFormData=formData;
-      const btab=document.getElementById('btabCargar');
-      switchBalTab('cargar',btab);
-      if(!pinUnlocked){document.getElementById('pinGate').style.display='flex';document.getElementById('uploadForm').style.display='none';alert('Ingresá el PIN para continuar.');return;}
-      document.getElementById('pinGate').style.display='none';
-      document.getElementById('uploadForm').style.display='block';
+      if (!Object.keys(formData).length) { alert('No se encontraron datos en el archivo.'); return; }
+      uFormData = formData;
+      switchBalTab('cargar', document.getElementById('btabCargar'));
+      if (!pinUnlocked) {
+        document.getElementById('pinGate').style.display = 'flex';
+        document.getElementById('uploadForm').style.display = 'none';
+        alert('Ingresá el PIN para continuar.');
+        return;
+      }
+      document.getElementById('pinGate').style.display = 'none';
+      document.getElementById('uploadForm').style.display = 'block';
       renderManualForm();
-      setStatus('Excel importado · '+Object.keys(formData).length+' campos. Completá identificación y guardá.','green');
-    }catch(err){alert('Error al leer el Excel: '+err.message);}
+      setStatus('Excel importado · ' + Object.keys(formData).length + ' campos. Completá identificación y guardá.', 'green');
+    } catch(err) { alert('Error al leer el Excel: ' + err.message); }
   };
   reader.readAsArrayBuffer(file);
 }
@@ -2101,8 +2123,23 @@ function buildFromManualBalances(company) {
     };
   };
 
-  const annualReports    = annuals.map(toReport);
-  const quarterlyReports = [...quarters.map(toReport), ...annuals.map(toReport)].slice(0,8);
+  // Deduplicate annuals per year (prefer manual over derived)
+  const _annByYr = {};
+  annuals.forEach(function(e) {
+    if (!_annByYr[e.year] || _annByYr[e.year].data._derived) _annByYr[e.year] = e;
+  });
+  const _annDeduped = Object.values(_annByYr).sort(function(a,b){return b.year-a.year;});
+  const annualReports = _annDeduped.map(toReport);
+
+  // Quarterly: Q1/Q2/Q3 from quarters + Q4 from annuals (deduplicated per year)
+  const _q4ByYr = {};
+  annuals.filter(function(e){return e.q==='Q4';}).forEach(function(e){
+    if (!_q4ByYr[e.year] || _q4ByYr[e.year].data._derived) _q4ByYr[e.year] = e;
+  });
+  const quarterlyReports = [
+    ...quarters.map(toReport),
+    ...Object.values(_q4ByYr).map(toReport)
+  ].sort(function(a,b){return a.fiscalDateEnding < b.fiscalDateEnding ? -1 : 1;}).slice(0,12);
 
   // Overview stub from company info
   const latest = annuals[0] || quarters[0];
@@ -3482,7 +3519,7 @@ function getAvailablePeriods(names) {
   names.forEach(name => {
     Object.keys(db).filter(k => k.startsWith(name+'||')).forEach(k => {
       const [,year,q] = k.split('||');
-      if (['Q1','Q2','Q3','Q4','Anual'].includes(q)) periods.add(`${year}||${q}`);
+      if (['Q1','Q2','Q3','Q4'].includes(q)) periods.add(`${year}||${q}`);
     });
   });
   return [...periods].sort((a,b) => {
