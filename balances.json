@@ -150,10 +150,11 @@
     "_moneda": "USD",
     "_unidad": "Millones",
     "_cons": "Consolidado",
-    "_ts": 1776898288302,
+    "_ts": 1777313916807,
     "ebitda_calc": 1358,
     "fin_net": -233,
-    "fcf": 652
+    "fcf": 652,
+    "_derived": true
   },
   "YPF S.A.||2024||Q1": {
     "revenue": 4310,
@@ -298,14 +299,15 @@
     "_moneda": "USD",
     "_unidad": "Millones",
     "_cons": "Consolidado",
-    "_ts": 1776898564134,
+    "_ts": 1777313916807,
     "ebitda_calc": 265,
     "fin_net": -211,
     "total_assets": 29391,
     "total_liab": 17521,
     "net_debt": 7824,
     "fcf": 290,
-    "total_debt": 8942
+    "total_debt": 8942,
+    "_derived": true
   },
   "YPF S.A.||2025||Anual": {
     "revenue": 18448,
