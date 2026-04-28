@@ -1035,5 +1035,11 @@
     "net_debt": 3672.576276713693,
     "fcf": -479.8481106192994,
     "total_debt": 4173.294275198388
+  },
+  "PAE||2025||Q3": {
+    "_moneda": "USD",
+    "_unidad": "Millones",
+    "_cons": "Consolidado",
+    "_ts": 1777406173833
   }
 }
