@@ -742,6 +742,9 @@ const COMPANIES = [
   {ticker:'COME',  name:'Soc. Comercial del Plata',    market:'BYMA',   currency:'ARS', sector:'Holding'},
   {ticker:'PAMP',  name:'Pampa (local ARS)',           market:'BYMA',   currency:'ARS', sector:'Energía'},
   {ticker:'MIRG',  name:'Mirgor',                      market:'BYMA',   currency:'ARS', sector:'Tech'},
+  {ticker:'PAE',   name:'Pan American Energy',          market:'OTC',    currency:'USD', sector:'Oil & Gas'},
+  {ticker:'TECO2', name:'Telecom Argentina',             market:'BYMA',   currency:'ARS', sector:'Telecom'},
+  {ticker:'AGRO',  name:'Adecoagro',                     market:'NYSE',   currency:'USD', sector:'Agro'},
 ];
 
 // ── STATE ────────────────────────────────────────────────────────────────────
@@ -2467,8 +2470,14 @@ async function selectCompany(ticker) {
     usage[ticker] = (usage[ticker]||0) + 1;
     localStorage.setItem('arg_usage', JSON.stringify(usage));
   } catch(e) {}
-  const company = COMPANIES.find(c => c.ticker === ticker);
-  if (!company) return;
+  let company = COMPANIES.find(c => c.ticker === ticker);
+  if (!company) {
+    // Check manual balances — ticker may be a company name for manual-only companies
+    const db = balGetAll();
+    const name = Object.keys(db).map(k=>k.split('||')[0]).find(n=>n===ticker||n.toLowerCase()===ticker.toLowerCase());
+    if (!name) return;
+    company = { ticker: name, name, sector: 'Manual', currency: 'USD', market: 'Manual' };
+  }
   currentCompany = company;
   searchInput.value = `${company.ticker} — ${company.name}`;
   dropdown.classList.remove('open');
@@ -3344,7 +3353,7 @@ function renderQuickBtns() {
     btn.textContent = co._manual
       ? co.name.split(' ').slice(0,2).join(' ')
       : `${co.ticker} · ${co.name.split(' ').slice(0,2).join(' ')}`;
-    btn.onclick = () => selectCompany(co.ticker || co.name);
+    btn.onclick = () => selectCompany(co._manual ? co.name : co.ticker);
     qb.appendChild(btn);
   });
 }
