@@ -2169,8 +2169,19 @@ function buildFromManualBalances(company) {
     })
   ].sort(function(a,b){return a.fiscalDateEnding < b.fiscalDateEnding ? -1 : 1;}).slice(0,12);
 
-  // Overview stub from company info
-  const latest = annuals[0] || quarters[0];
+  // Pick entry matching selected period for ratio calculation
+  let latest = null;
+  if (selectedYear && selectedQuarter && selectedQuarter !== 'annual') {
+    latest = entries.find(e => String(e.year)===String(selectedYear) && e.q===selectedQuarter)
+          || entries.find(e => String(e.year)===String(selectedYear))
+          || annuals[0] || quarters[0];
+  } else if (selectedYear) {
+    latest = annuals.find(e => String(e.year)===String(selectedYear))
+          || quarters.find(e => String(e.year)===String(selectedYear))
+          || annuals[0] || quarters[0];
+  } else {
+    latest = annuals[0] || quarters[0];
+  }
   const d = calcDerived(latest.data);
   const m = mult(latest);
   // Calculate ratios from latest balance data
@@ -2714,6 +2725,14 @@ function renderCF(cashflow, company) {
 
 // ── RATIOS ────────────────────────────────────────────────────────────────────
 function renderRatios(ov) {
+  // If a specific year/quarter is selected, show single-period ratios as before
+  const showMulti = !selectedYear && fetchedData?._isManual && currentCompany;
+
+  if (showMulti) {
+    renderRatiosMulti();
+    return;
+  }
+
   const sections = [
     { title:'Valuación', items:[
       ['P/E Ratio', ov.PERatio, ''],
@@ -2773,6 +2792,129 @@ function renderRatios(ov) {
       </div>`).join('')}
     </div>`;
 }
+
+function renderRatiosMulti() {
+  const db = balGetAll();
+  const prefix = currentCompany.name + '||';
+  // Get last 3 years of annual/Q4 entries
+  const annualEntries = Object.entries(db)
+    .filter(([k]) => k.startsWith(prefix))
+    .map(([k,v]) => { const [,year,q]=k.split('||'); return {year:parseInt(year),q,data:v}; })
+    .filter(e => e.q==='Anual' || e.q==='Q4')
+    .reduce((acc, e) => { // one per year, prefer non-derived
+      const existing = acc.find(x => x.year===e.year);
+      if (!existing) acc.push(e);
+      else if (existing.data._derived && !e.data._derived) {
+        const idx = acc.indexOf(existing); acc[idx] = e;
+      }
+      return acc;
+    }, [])
+    .sort((a,b) => b.year - a.year)
+    .slice(0, 3);
+
+  if (!annualEntries.length) {
+    document.getElementById('rt').innerHTML = '<div style="padding:2rem;color:var(--text3);text-align:center">No hay balances anuales cargados.</div>';
+    return;
+  }
+
+  // Build overview for each year
+  const ovByYear = annualEntries.map(e => {
+    const d = calcDerived(e.data);
+    const _m = e.data._unidad==='Miles' ? 1e3 : e.data._unidad==='Millones' ? 1e6 : 1;
+    const _rev  = d.revenue    !== null ? d.revenue    * _m : null;
+    const _ni   = d.net_income !== null ? d.net_income * _m : null;
+    const _ebit = d.ebit       !== null ? d.ebit       * _m : null;
+    const _da   = d.da         !== null ? Math.abs(d.da * _m) : null;
+    const _ebitda = (_ebit!==null&&_da!==null) ? _ebit+_da : null;
+    const _eq   = d.equity     !== null ? d.equity     * _m : null;
+    const _ta   = d.total_assets !== null ? d.total_assets * _m : null;
+    const _nd   = d.net_debt   !== null ? d.net_debt   * _m : null;
+    const _mktcap = e.data.mkt_cap ? e.data.mkt_cap * 1e6 : null;
+    const qm = quoteGetMeta(currentCompany.ticker);
+    const _price = qm?.price ? parseFloat(qm.price) : null;
+    const _shares = SHARES_M[currentCompany.ticker] ? SHARES_M[currentCompany.ticker]*1e6 : null;
+    const _mktcapLive = (_price&&_shares) ? _price*_shares : _mktcap;
+
+    return {
+      year: e.year, q: e.q,
+      rev:    _rev    !== null ? _rev/1e6    : null,
+      ebitda: _ebitda !== null ? _ebitda/1e6 : null,
+      ni:     _ni     !== null ? _ni/1e6     : null,
+      ebit:   _ebit   !== null ? _ebit/1e6   : null,
+      eq:     _eq     !== null ? _eq/1e6     : null,
+      ta:     _ta     !== null ? _ta/1e6     : null,
+      nd:     _nd     !== null ? _nd/1e6     : null,
+      mktcap: _mktcapLive !== null ? _mktcapLive/1e6 : null,
+      ebitda_m: (_ebitda!==null&&_rev&&_rev!==0) ? _ebitda/_rev*100 : null,
+      net_m:    (_ni!==null&&_rev&&_rev!==0)      ? _ni/_rev*100     : null,
+      ebit_m:   (_ebit!==null&&_rev&&_rev!==0)    ? _ebit/_rev*100   : null,
+      roe:  (_ni!==null&&_eq&&_eq!==0) ? _ni/_eq*100 : null,
+      roa:  (_ni!==null&&_ta&&_ta!==0) ? _ni/_ta*100 : null,
+      pe:   (_mktcapLive&&_ni&&_ni>0)  ? _mktcapLive/_ni   : null,
+      pbv:  (_mktcapLive&&_eq&&_eq>0)  ? _mktcapLive/_eq   : null,
+      ev_ebitda: (_mktcapLive!==null&&_nd!==null&&_ebitda&&_ebitda!==0) ? (_mktcapLive+_nd)/_ebitda : null,
+      ev_rev:    (_mktcapLive!==null&&_nd!==null&&_rev&&_rev!==0)       ? (_mktcapLive+_nd)/_rev    : null,
+      nd_ebitda: (_nd!==null&&_ebitda&&_ebitda!==0) ? _nd/_ebitda : null,
+    };
+  });
+
+  const fmtM   = v => v===null ? '—' : '$'+v.toLocaleString('es-AR',{maximumFractionDigits:0})+'M';
+  const fmtPct = v => v===null ? '—' : `<span style="color:${v<0?'var(--red)':'var(--green)'}">${v.toFixed(1)}%</span>`;
+  const fmtX   = v => v===null ? '—' : v.toFixed(1)+'x';
+  const fmtPE  = v => v===null ? '—' : v.toFixed(1)+'x';
+
+  const rows = [
+    {title:'RESULTADOS', isHeader:true},
+    {lbl:'Revenue',          vals: ovByYear.map(o=>fmtM(o.rev))},
+    {lbl:'EBITDA',           vals: ovByYear.map(o=>fmtM(o.ebitda))},
+    {lbl:'EBIT',             vals: ovByYear.map(o=>fmtM(o.ebit))},
+    {lbl:'Net Income',       vals: ovByYear.map(o=>fmtM(o.ni))},
+    {title:'MÁRGENES', isHeader:true},
+    {lbl:'EBITDA Margin',    vals: ovByYear.map(o=>fmtPct(o.ebitda_m))},
+    {lbl:'EBIT Margin',      vals: ovByYear.map(o=>fmtPct(o.ebit_m))},
+    {lbl:'Net Margin',       vals: ovByYear.map(o=>fmtPct(o.net_m))},
+    {title:'RENTABILIDAD', isHeader:true},
+    {lbl:'ROE',              vals: ovByYear.map(o=>fmtPct(o.roe))},
+    {lbl:'ROA',              vals: ovByYear.map(o=>fmtPct(o.roa))},
+    {title:'DEUDA', isHeader:true},
+    {lbl:'Deuda Neta',       vals: ovByYear.map(o=>fmtM(o.nd))},
+    {lbl:'Equity',           vals: ovByYear.map(o=>fmtM(o.eq))},
+    {lbl:'Total Assets',     vals: ovByYear.map(o=>fmtM(o.ta))},
+    {lbl:'ND / EBITDA',      vals: ovByYear.map(o=>fmtX(o.nd_ebitda))},
+    {title:'VALUACIÓN', isHeader:true},
+    {lbl:'Market Cap',       vals: ovByYear.map(o=>fmtM(o.mktcap))},
+    {lbl:'P/E',              vals: ovByYear.map(o=>fmtPE(o.pe))},
+    {lbl:'P/BV',             vals: ovByYear.map(o=>fmtPE(o.pbv))},
+    {lbl:'EV/EBITDA',        vals: ovByYear.map(o=>fmtX(o.ev_ebitda))},
+    {lbl:'EV/Revenue',       vals: ovByYear.map(o=>fmtX(o.ev_rev))},
+  ];
+
+  const yrLabels = ovByYear.map(o => o.year + ' (' + o.q + ')');
+
+  document.getElementById('rt').innerHTML = `
+    <div style="font-size:11px;color:var(--text3);margin-bottom:1rem">
+      Mostrando últimos ${ovByYear.length} año(s) · Seleccioná un año en el selector para ver un período específico
+    </div>
+    <div class="table-wrap">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr>
+        <th style="text-align:left;padding:7px 12px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:11px">Métrica</th>
+        ${yrLabels.map(l=>`<th style="text-align:right;padding:7px 12px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:11px">${l}</th>`).join('')}
+      </tr></thead>
+      <tbody>
+        ${rows.map((row,i) => {
+          if (row.isHeader) return `<tr><td colspan="${ovByYear.length+1}"
+            style="padding:6px 12px;font-size:10px;font-weight:600;color:var(--text3);
+            text-transform:uppercase;letter-spacing:0.5px;background:var(--bg3)">${row.title}</td></tr>`;
+          return `<tr style="background:${i%2===0?'transparent':'rgba(0,0,0,0.02)'}">
+            <td style="padding:7px 12px;color:var(--text3)">${row.lbl}</td>
+            ${row.vals.map(v=>`<td style="padding:7px 12px;text-align:right;font-family:'DM Mono',monospace;font-weight:500">${v}</td>`).join('')}
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>`;
+}
+
 
 // ── CACHE TAB ─────────────────────────────────────────────────────────────────
 function renderCache() {
