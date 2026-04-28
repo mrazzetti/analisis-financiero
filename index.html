@@ -2341,13 +2341,23 @@ function setSelectedYear(val) {
   selectedYear = val;
   selectedQuarter = document.getElementById('quarterSelect')?.value || 'annual';
   currentPeriod = (selectedQuarter === 'annual') ? 'annual' : 'quarterly';
-  if (currentCompany) renderAll(currentCompany);
+  if (currentCompany) {
+    if (fetchedData?._isManual) {
+      fetchedData = buildFromManualBalances(currentCompany) || fetchedData;
+    }
+    renderAll(currentCompany);
+  }
 }
 
 function setSelectedQuarter(val) {
   selectedQuarter = val;
   currentPeriod = (val === 'annual') ? 'annual' : 'quarterly';
-  if (currentCompany) renderAll(currentCompany);
+  if (currentCompany) {
+    if (fetchedData?._isManual) {
+      fetchedData = buildFromManualBalances(currentCompany) || fetchedData;
+    }
+    renderAll(currentCompany);
+  }
 }
 
 function populateYearSelector() {
