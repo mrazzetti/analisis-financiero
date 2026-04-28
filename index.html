@@ -2343,7 +2343,9 @@ function setSelectedYear(val) {
   currentPeriod = (selectedQuarter === 'annual') ? 'annual' : 'quarterly';
   if (currentCompany) {
     if (fetchedData?._isManual) {
+      const prevQuote2 = fetchedData.quote;
       fetchedData = buildFromManualBalances(currentCompany) || fetchedData;
+      if (prevQuote2) fetchedData.quote = prevQuote2;
     }
     renderAll(currentCompany);
   }
