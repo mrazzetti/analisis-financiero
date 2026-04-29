@@ -3786,15 +3786,17 @@ function applyLang() {
 function getAvailablePeriods(names) {
   const db = balGetAll();
   const periods = new Set();
+  const qOrder = {Q1:1, Q2:2, Q3:3, Q4:4, Anual:5};
   names.forEach(name => {
     Object.keys(db).filter(k => k.startsWith(name+'||')).forEach(k => {
       const [,year,q] = k.split('||');
-      if (['Q1','Q2','Q3','Q4'].includes(q)) periods.add(`${year}||${q}`);
+      if (qOrder[q] !== undefined) periods.add(year+'||'+q);
     });
   });
   return [...periods].sort((a,b) => {
     const [ay,aq] = a.split('||'); const [by,bq] = b.split('||');
-    return ay!==by ? ay.localeCompare(by) : aq.localeCompare(bq);
+    if (ay !== by) return ay.localeCompare(by);
+    return (qOrder[aq]||9) - (qOrder[bq]||9);
   });
 }
 
