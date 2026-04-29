@@ -3802,8 +3802,8 @@ function getAvailablePeriods(names) {
 }
 
 function periodLabel(p) {
-  const [year, q] = p.split('||');
-  return `${q} ${year}`;
+  const parts = p.split('||'), year = parts[0], q = parts[1];
+  return q === 'Anual' ? year + ' (Anual)' : q + ' ' + year;
 }
 
 // Get value of a metric key from a manual balance entry
@@ -3856,11 +3856,24 @@ function renderComparator() {
     return co ? co.name : t;
   });
 
-  const allPeriods = getAvailablePeriods(names).filter(function(p) {
-    const q = p.split('||')[1];
-    if (compViewMode === 'anual') return q === 'Anual' || q === 'Q4';
-    return q === 'Q1' || q === 'Q2' || q === 'Q3' || q === 'Q4';
-  });
+  const _rawPeriods = getAvailablePeriods(names);
+  let allPeriods;
+  if (compViewMode === 'anual') {
+    // One entry per year: prefer Anual over Q4
+    const _byYr = {};
+    _rawPeriods.forEach(function(p) {
+      const parts = p.split('||'), yr = parts[0], q = parts[1];
+      if (q !== 'Anual' && q !== 'Q4') return;
+      if (!_byYr[yr] || q === 'Anual') _byYr[yr] = p;
+    });
+    allPeriods = Object.values(_byYr).sort();
+  } else {
+    // Trimestral: Q1-Q4 only, no Anual
+    allPeriods = _rawPeriods.filter(function(p) {
+      const q = p.split('||')[1];
+      return q === 'Q1' || q === 'Q2' || q === 'Q3' || q === 'Q4';
+    });
+  }
   if (!compRangeFrom && allPeriods.length) compRangeFrom = allPeriods[0];
   if (!compRangeTo   && allPeriods.length) compRangeTo   = allPeriods[allPeriods.length-1];
   if (!compTablePeriod && allPeriods.length) compTablePeriod = allPeriods[allPeriods.length-1];
