@@ -761,6 +761,7 @@ let compActiveMetric = 'ebitda';      // single active metric for chart
 let compRangeFrom   = '';             // 'YYYY||QN'
 let compRangeTo     = '';             // 'YYYY||QN'
 let compTablePeriod = '';             // 'YYYY||QN' for table snapshot
+let compViewMode    = 'anual';        // 'anual' | 'trimestral'
 
 const COMP_COLORS = ['#009e73','#1a6fd4','#b87a00'];
 const COMP_COLORS_BG = ['rgba(0,158,115,0.18)','rgba(26,111,212,0.18)','rgba(184,122,0,0.18)'];
@@ -3855,7 +3856,11 @@ function renderComparator() {
     return co ? co.name : t;
   });
 
-  const allPeriods = getAvailablePeriods(names);
+  const allPeriods = getAvailablePeriods(names).filter(function(p) {
+    const q = p.split('||')[1];
+    if (compViewMode === 'anual') return q === 'Anual' || q === 'Q4';
+    return q === 'Q1' || q === 'Q2' || q === 'Q3' || q === 'Q4';
+  });
   if (!compRangeFrom && allPeriods.length) compRangeFrom = allPeriods[0];
   if (!compRangeTo   && allPeriods.length) compRangeTo   = allPeriods[allPeriods.length-1];
   if (!compTablePeriod && allPeriods.length) compTablePeriod = allPeriods[allPeriods.length-1];
@@ -3911,7 +3916,13 @@ function renderComparator() {
 
     <div class="cc">
       <div class="ch"><span class="ct">Gráfico de evolución</span>
-        <div style="display:flex;gap:8px;align-items:center">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;border:0.5px solid var(--border2);border-radius:6px;overflow:hidden">
+            <button onclick="setCompViewMode('anual')" id="compModeAnual"
+              style="padding:4px 10px;font-size:11px;border:none;cursor:pointer;background:${compViewMode==='anual'?'var(--green2)':'var(--bg3)'};color:${compViewMode==='anual'?'var(--green)':'var(--text3)'}">Anual</button>
+            <button onclick="setCompViewMode('trimestral')" id="compModeTrim"
+              style="padding:4px 10px;font-size:11px;border:none;cursor:pointer;background:${compViewMode==='trimestral'?'var(--green2)':'var(--bg3)'};color:${compViewMode==='trimestral'?'var(--green)':'var(--text3)'}">Trimestral</button>
+          </div>
           <span style="font-size:11px;color:var(--text3)">Desde</span>
           <select id="compFrom" onchange="compRangeFrom=this.value;runComparison()"
             style="padding:4px 8px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:6px;color:var(--text);font-size:11px;outline:none">
@@ -4014,6 +4025,17 @@ function selectMetric(key) {
 function compClear(slot) {
   compSlots[slot] = null;
   renderComparator();
+}
+
+function setCompViewMode(mode) {
+  compViewMode = mode;
+  compRangeFrom = ''; compRangeTo = ''; // reset range when switching mode
+  runComparison();
+  // Update button styles
+  const btnA = document.getElementById('compModeAnual');
+  const btnT = document.getElementById('compModeTrim');
+  if (btnA) { btnA.style.background = mode==='anual'?'var(--green2)':'var(--bg3)'; btnA.style.color = mode==='anual'?'var(--green)':'var(--text3)'; }
+  if (btnT) { btnT.style.background = mode==='trimestral'?'var(--green2)':'var(--bg3)'; btnT.style.color = mode==='trimestral'?'var(--green)':'var(--text3)'; }
 }
 
 function runComparison() {
