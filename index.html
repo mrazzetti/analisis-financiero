@@ -28,6 +28,7 @@ body.light {
   --amber:#b87a00; --amber2:rgba(184,122,0,0.10);
 }
 .theme-btn {
+  flex-shrink:0; white-space:nowrap;
   display:flex; align-items:center; gap:6px; padding:6px 12px;
   background:var(--bg3); border:0.5px solid var(--border2);
   border-radius:var(--radius); color:var(--text2); font-size:12px;
@@ -112,17 +113,17 @@ body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--t
 /* HEADER */
 .header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 1.5rem; height: 56px;
+  padding: 0 1rem; height: 56px; min-height: 56px;
   border-bottom: 0.5px solid var(--border);
-  background: var(--bg); position: sticky; top: 0; z-index: 50;
-  flex-wrap: wrap; gap: 8px;
+  background: var(--bg); position: sticky; top: 0; z-index: 100;
+  flex-wrap: nowrap; gap: 8px; overflow: hidden;
 }
-.logo { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+.logo { flex-shrink:0; font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
 .logo span { color: var(--green); }
 .logo sub { font-size: 9px; color: var(--text3); font-weight: 400; margin-left: 2px; }
 
 /* SEARCH */
-.search-wrap { position: relative; flex: 1; max-width: 440px; min-width: 220px; }
+.search-wrap { position: relative; flex: 1; min-width: 0; max-width: 440px; }
 .search-input {
   width: 100%; padding: 8px 12px 8px 34px;
   background: var(--bg3); border: 0.5px solid var(--border2);
@@ -510,13 +511,7 @@ body.dark {
       placeholder="Buscar empresa: YPF, Vista, Galicia..." autocomplete="off" />
     <div class="dropdown" id="dropdown"></div>
   </div>
-  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <div class="cache-info">
-      <span class="cache-dot" id="cacheDot"></span>
-      <span id="cacheCount">Sin caché</span>
-    </div>
   <button class="theme-btn" id="themeBtn" onclick="toggleTheme()">☾ Dark</button>
-  </div>
 </div>
 
 <div class="top-nav">
@@ -926,8 +921,8 @@ function cacheClear(ticker) {
 
 function updateCacheBadge() {
   const n = Object.keys(cacheGetAll()).length;
-  document.getElementById('cacheDot').className = 'cache-dot' + (n ? ' green' : '');
-  document.getElementById('cacheCount').textContent = n === 0
+  const _dot = document.getElementById('cacheDot'); if(_dot) _dot.className = 'cache-dot' + (n ? ' green' : '');
+  const _cnt = document.getElementById('cacheCount'); if(_cnt) _cnt.textContent = n === 0
     ? 'Sin caché'
     : n + ' empresa' + (n > 1 ? 's' : '') + ' en caché';
 }
