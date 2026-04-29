@@ -2841,15 +2841,33 @@ function renderRatiosMulti() {
       });
     entriesToShow = Object.values(byYear).sort((a,b)=>b.year-a.year).slice(0,3);
   } else {
-    // No year, Anual view: show last 3 annual/Q4 entries deduplicated by year
-    const byYear = {};
-    allEntries
-      .filter(e => e.q==='Anual' || e.q==='Q4')
-      .forEach(e => {
-        const yr = e.year;
-        if (!byYear[yr] || (byYear[yr].data._derived && !e.data._derived)) byYear[yr] = e;
-      });
-    entriesToShow = Object.values(byYear).sort((a,b)=>b.year-a.year).slice(0,3);
+    // No year selected
+    if (selectedQuarter && selectedQuarter !== 'annual') {
+      // Quarter selected without year: show that quarter across last 3 years
+      const byYear = {};
+      allEntries
+        .filter(e => e.q === selectedQuarter)
+        .forEach(e => {
+          if (!byYear[e.year] || (byYear[e.year].data._derived && !e.data._derived)) byYear[e.year] = e;
+        });
+      entriesToShow = Object.values(byYear).sort((a,b)=>b.year-a.year).slice(0,3);
+    } else {
+      // Anual view: prefer 'Anual' entry over 'Q4' per year, then prefer manual over derived
+      const byYear = {};
+      allEntries
+        .filter(e => e.q==='Anual' || e.q==='Q4')
+        .forEach(e => {
+          const yr = e.year;
+          const ex = byYear[yr];
+          if (!ex) { byYear[yr] = e; return; }
+          // Prefer Anual over Q4
+          if (e.q==='Anual' && ex.q==='Q4') { byYear[yr] = e; return; }
+          if (e.q==='Q4' && ex.q==='Anual') return; // keep existing Anual
+          // Same type: prefer manual over derived
+          if (ex.data._derived && !e.data._derived) byYear[yr] = e;
+        });
+      entriesToShow = Object.values(byYear).sort((a,b)=>b.year-a.year).slice(0,3);
+    }
   }
 
   if (!entriesToShow.length) {
