@@ -2661,7 +2661,6 @@ function renderOverviewManual(ov) {
       '<span style="font-size:11px;color:var(--text3)">'+periodLbl+'</span>'+
     '</div>'+
     '<div class="mgrid">'+
-      '<div class="mc"><div class="ml">Market Cap</div><div class="mv">'+(r.mktcap!==null?'$'+Math.round(r.mktcap).toLocaleString('es-AR')+'M':'—')+'</div><div class="ms">Precio × acciones</div></div>'+
       '<div class="mc"><div class="ml">Revenue</div><div class="mv">'+fmtA(r.rev)+'</div><div class="ms">'+unidad+'</div></div>'+
       '<div class="mc"><div class="ml">EBITDA</div><div class="mv">'+fmtA(r.ebitda)+'</div><div class="ms">EBIT + D&A</div></div>'+
       '<div class="mc"><div class="ml">Net Income</div><div class="mv">'+(r.ni!==null?'<span style="color:'+(r.ni<0?'var(--red)':'var(--green)')+'">'+fmtA(r.ni)+'</span>':'—')+'</div><div class="ms">'+unidad+'</div></div>'+
@@ -2670,9 +2669,6 @@ function renderOverviewManual(ov) {
       '<div class="mc"><div class="ml">Deuda Neta</div><div class="mv">'+fmtA(r.nd)+'</div><div class="ms">'+unidad+'</div></div>'+
       '<div class="mc"><div class="ml">ND / EBITDA</div><div class="mv">'+fmtX(r.nd_ebitda)+'</div><div class="ms">Apalancamiento</div></div>'+
       '<div class="mc"><div class="ml">EBITDA / Intereses</div><div class="mv">'+fmtX(ebitdaCov)+'</div><div class="ms">Cobertura de intereses</div></div>'+
-      '<div class="mc"><div class="ml">P/E</div><div class="mv">'+fmtX(r.pe)+'</div><div class="ms">Precio / Earnings</div></div>'+
-      '<div class="mc"><div class="ml">P/BV</div><div class="mv">'+fmtX(r.pbv)+'</div><div class="ms">Precio / Book</div></div>'+
-      '<div class="mc"><div class="ml">EV/EBITDA</div><div class="mv">'+fmtX(r.ev_ebitda)+'</div><div class="ms">Enterprise value</div></div>'+
     '</div>';
 }
 
