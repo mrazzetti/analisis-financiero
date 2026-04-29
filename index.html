@@ -2001,7 +2001,15 @@ async function enrichWithPrice(company, data) {
   }
 
   if (!quote) return;
-  const q = quote['Global Quote'] || {};
+  // If quote stub has no price, use cached quote from AV
+  let _quote = quote;
+  if (!quote?.['Global Quote']?.['05. price'] || quote['Global Quote']['05. price'] === 'None') {
+    const _cached = quoteGet(company.ticker);
+    if (_cached?.['Global Quote']?.['05. price'] && _cached['Global Quote']['05. price'] !== 'None') {
+      _quote = _cached;
+    }
+  }
+  const q = _quote['Global Quote'] || {};
   const price = parseFloat(q['05. price']);
   if (!price || isNaN(price)) return;
 
@@ -2356,7 +2364,9 @@ function setSelectedQuarter(val) {
   currentPeriod = (val === 'annual') ? 'annual' : 'quarterly';
   if (currentCompany) {
     if (fetchedData?._isManual) {
+      const _pq = fetchedData.quote;
       fetchedData = buildFromManualBalances(currentCompany) || fetchedData;
+      if (_pq) fetchedData.quote = _pq;
     }
     renderAll(currentCompany);
   }
