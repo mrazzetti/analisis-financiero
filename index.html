@@ -2747,194 +2747,162 @@ function renderCF(cashflow, company) {
 
 // ── RATIOS ────────────────────────────────────────────────────────────────────
 function renderRatios(ov) {
-  // If a specific year/quarter is selected, show single-period ratios as before
-  const showMulti = !selectedYear && fetchedData?._isManual && currentCompany;
+  // Always use the multi renderer — it handles all cases
+  renderRatiosMulti();
+}
 
-  if (showMulti) {
-    renderRatiosMulti();
-    return;
-  }
+function calcRatiosForEntry(entry, company) {
+  const d = calcDerived(entry.data);
+  const _m = entry.data._unidad==='Miles' ? 1e3 : entry.data._unidad==='Millones' ? 1e6 : 1;
+  const _rev   = d.revenue     !== null && d.revenue     !== undefined ? d.revenue     * _m : null;
+  const _ni    = d.net_income  !== null && d.net_income  !== undefined ? d.net_income  * _m : null;
+  const _ebit  = d.ebit        !== null && d.ebit        !== undefined ? d.ebit        * _m : null;
+  const _da    = d.da          !== null && d.da          !== undefined ? Math.abs(d.da * _m) : null;
+  const _gp    = d.gross_profit!== null && d.gross_profit!== undefined ? d.gross_profit* _m : null;
+  const _ebitda = (_ebit!==null && _da!==null) ? _ebit+_da : null;
+  const _eq    = d.equity      !== null && d.equity      !== undefined ? d.equity      * _m : null;
+  const _ta    = d.total_assets!== null && d.total_assets!== undefined ? d.total_assets* _m : null;
+  const _nd    = d.net_debt    !== null && d.net_debt    !== undefined ? d.net_debt    * _m : null;
 
-  const sections = [
-    { title:'Valuación', items:[
-      ['P/E Ratio', ov.PERatio, ''],
-      ['Forward P/E', ov.ForwardPE, ''],
-      ['P/BV', ov.PriceToBookRatio, 'x'],
-      ['EV/EBITDA', ov.EVToEBITDA, 'x'],
-      ['EV/Revenue', ov.EVToRevenue, 'x'],
-      ['Price/Sales TTM', ov.PriceToSalesRatioTTM, 'x'],
-    ]},
-    { title:'Rentabilidad', items:[
-      ['ROE (TTM)', ov.ReturnOnEquityTTM, '%', true],
-      ['ROA (TTM)', ov.ReturnOnAssetsTTM, '%', true],
-      ['Profit Margin', ov.ProfitMargin, '%', true],
-      ['Operating Margin TTM', ov.OperatingMarginTTM, '%', true],
-      ['Gross Profit TTM', ov.GrossProfitTTM, 'M', false, true],
-      ['Revenue TTM', ov.RevenueTTM, 'M', false, true],
-    ]},
-    { title:'Mercado', items:[
-      ['Mkt Cap', ov.MarketCapitalization, '', false, true],
-      ['52W High', ov['52WeekHigh'], '$'],
-      ['52W Low', ov['52WeekLow'], '$'],
-      ['Beta', ov.Beta, ''],
-      ['Shares Outstanding', ov.SharesOutstanding, '', false, true],
-      ['Analyst Target', ov.AnalystTargetPrice, '$'],
-    ]},
-    { title:'Dividendos', items:[
-      ['Dividend Yield', ov.DividendYield, '%', true],
-      ['Dividend/Share', ov.DividendPerShare, '$'],
-      ['Payout Ratio', ov.PayoutRatio, '%', true],
-      ['Ex-Dividend Date', ov.ExDividendDate, ''],
-      ['Last Split Factor', ov.LastSplitFactor, ''],
-      ['Last Split Date', ov.LastSplitDate, ''],
-    ]},
-  ];
+  // Price-based metrics
+  const qm = quoteGetMeta(company.ticker);
+  const _price  = qm?.price ? parseFloat(qm.price) : null;
+  const _shares = SHARES_M[company.ticker] ? SHARES_M[company.ticker]*1e6 : null;
+  const _mktcap = (_price && _shares) ? _price * _shares : (entry.data.mkt_cap ? entry.data.mkt_cap*1e6 : null);
+  const _ev     = (_mktcap !== null && _nd !== null) ? _mktcap + _nd : null;
 
-  document.getElementById('rt').innerHTML = `
-    <div class="two" style="margin:0">
-    ${sections.map(sec=>`
-      <div class="cc" style="margin:0">
-        <div class="ch"><span class="ct">${sec.title}</span></div>
-        ${sec.items.map(([label, val, suf, isPct, isBig])=>{
-          let display = '—';
-          if (val && val !== 'None' && val !== '-') {
-            const n = parseFloat(val);
-            if (!isNaN(n)) {
-              if (isPct) display = (n*100).toFixed(2)+'%';
-              else if (isBig) display = fmt(n);
-              else if (suf==='$') display = '$'+n.toFixed(2);
-              else display = n.toFixed(2)+(suf||'');
-            } else { display = val; }
-          }
-          return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:12px">
-            <span style="color:var(--text3)">${label}</span>
-            <span style="font-family:'DM Mono',monospace;font-weight:500">${display}</span>
-          </div>`;
-        }).join('')}
-      </div>`).join('')}
-    </div>`;
+  return {
+    year: entry.year, q: entry.q,
+    // Absolutes (in M for display)
+    rev:    _rev    !== null ? _rev/_m*1    : null,  // keep in original unit
+    ebitda: _ebitda !== null ? _ebitda/_m*1 : null,
+    ebit:   _ebit   !== null ? _ebit/_m*1   : null,
+    ni:     _ni     !== null ? _ni/_m*1     : null,
+    gp:     _gp     !== null ? _gp/_m*1     : null,
+    eq:     _eq     !== null ? _eq/_m*1     : null,
+    ta:     _ta     !== null ? _ta/_m*1     : null,
+    nd:     _nd     !== null ? _nd/_m*1     : null,
+    mktcap: _mktcap !== null ? _mktcap/1e6  : null,
+    unidad: entry.data._unidad || 'Millones',
+    // Margins
+    ebitda_m: (_ebitda!==null&&_rev&&_rev!==0) ? _ebitda/_rev*100 : null,
+    gp_m:     (_gp!==null&&_rev&&_rev!==0)     ? _gp/_rev*100     : null,
+    ebit_m:   (_ebit!==null&&_rev&&_rev!==0)   ? _ebit/_rev*100   : null,
+    net_m:    (_ni!==null&&_rev&&_rev!==0)      ? _ni/_rev*100     : null,
+    // Returns
+    roe: (_ni!==null&&_eq&&_eq!==0) ? _ni/_eq*100 : null,
+    roa: (_ni!==null&&_ta&&_ta!==0) ? _ni/_ta*100 : null,
+    // Leverage
+    nd_ebitda: (_nd!==null&&_ebitda&&_ebitda!==0) ? _nd/_ebitda : null,
+    nd_eq:     (_nd!==null&&_eq&&_eq!==0)          ? _nd/_eq     : null,
+    // Valuation
+    pe:        (_mktcap&&_ni&&_ni>0)  ? _mktcap/_ni    : null,
+    pbv:       (_mktcap&&_eq&&_eq>0)  ? _mktcap/_eq    : null,
+    ev_ebitda: (_ev!==null&&_ebitda&&_ebitda!==0) ? _ev/_ebitda : null,
+    ev_rev:    (_ev!==null&&_rev&&_rev!==0)        ? _ev/_rev    : null,
+  };
 }
 
 function renderRatiosMulti() {
+  if (!currentCompany) return;
   const db = balGetAll();
   const prefix = currentCompany.name + '||';
-  // Get last 3 years of annual/Q4 entries
-  const annualEntries = Object.entries(db)
-    .filter(([k]) => k.startsWith(prefix))
-    .map(([k,v]) => { const [,year,q]=k.split('||'); return {year:parseInt(year),q,data:v}; })
-    .filter(e => e.q==='Anual' || e.q==='Q4')
-    .reduce((acc, e) => { // one per year, prefer non-derived
-      const existing = acc.find(x => x.year===e.year);
-      if (!existing) acc.push(e);
-      else if (existing.data._derived && !e.data._derived) {
-        const idx = acc.indexOf(existing); acc[idx] = e;
-      }
-      return acc;
-    }, [])
-    .sort((a,b) => b.year - a.year)
-    .slice(0, 3);
 
-  if (!annualEntries.length) {
-    document.getElementById('rt').innerHTML = '<div style="padding:2rem;color:var(--text3);text-align:center">No hay balances anuales cargados.</div>';
+  // Get all entries
+  const allEntries = Object.entries(db)
+    .filter(([k]) => k.startsWith(prefix))
+    .map(([k,v]) => { const [,year,q]=k.split('||'); return {year:parseInt(year), q, data:v}; });
+
+  let entriesToShow = [];
+
+  if (selectedYear && selectedQuarter && selectedQuarter !== 'annual') {
+    // Specific quarter: show just that one
+    const e = allEntries.find(e => String(e.year)===String(selectedYear) && e.q===selectedQuarter);
+    if (e) entriesToShow = [e];
+  } else if (selectedYear) {
+    // Year selected, annual view: show Anual or Q4 for that year
+    const e = allEntries.find(e => String(e.year)===String(selectedYear) && e.q==='Anual')
+           || allEntries.find(e => String(e.year)===String(selectedYear) && e.q==='Q4');
+    if (e) entriesToShow = [e];
+  } else {
+    // No year: show last 3 annual/Q4 entries deduplicated by year
+    const byYear = {};
+    allEntries
+      .filter(e => e.q==='Anual' || e.q==='Q4')
+      .forEach(e => {
+        const yr = e.year;
+        if (!byYear[yr] || (byYear[yr].data._derived && !e.data._derived)) byYear[yr] = e;
+      });
+    entriesToShow = Object.values(byYear).sort((a,b)=>b.year-a.year).slice(0,3);
+  }
+
+  if (!entriesToShow.length) {
+    document.getElementById('rt').innerHTML = '<div style="padding:2rem;color:var(--text3);text-align:center">No hay datos para el período seleccionado.</div>';
     return;
   }
 
-  // Build overview for each year
-  const ovByYear = annualEntries.map(e => {
-    const d = calcDerived(e.data);
-    const _m = e.data._unidad==='Miles' ? 1e3 : e.data._unidad==='Millones' ? 1e6 : 1;
-    const _rev  = d.revenue    !== null ? d.revenue    * _m : null;
-    const _ni   = d.net_income !== null ? d.net_income * _m : null;
-    const _ebit = d.ebit       !== null ? d.ebit       * _m : null;
-    const _da   = d.da         !== null ? Math.abs(d.da * _m) : null;
-    const _ebitda = (_ebit!==null&&_da!==null) ? _ebit+_da : null;
-    const _eq   = d.equity     !== null ? d.equity     * _m : null;
-    const _ta   = d.total_assets !== null ? d.total_assets * _m : null;
-    const _nd   = d.net_debt   !== null ? d.net_debt   * _m : null;
-    const _mktcap = e.data.mkt_cap ? e.data.mkt_cap * 1e6 : null;
-    const qm = quoteGetMeta(currentCompany.ticker);
-    const _price = qm?.price ? parseFloat(qm.price) : null;
-    const _shares = SHARES_M[currentCompany.ticker] ? SHARES_M[currentCompany.ticker]*1e6 : null;
-    const _mktcapLive = (_price&&_shares) ? _price*_shares : _mktcap;
-
-    return {
-      year: e.year, q: e.q,
-      rev:    _rev    !== null ? _rev/1e6    : null,
-      ebitda: _ebitda !== null ? _ebitda/1e6 : null,
-      ni:     _ni     !== null ? _ni/1e6     : null,
-      ebit:   _ebit   !== null ? _ebit/1e6   : null,
-      eq:     _eq     !== null ? _eq/1e6     : null,
-      ta:     _ta     !== null ? _ta/1e6     : null,
-      nd:     _nd     !== null ? _nd/1e6     : null,
-      mktcap: _mktcapLive !== null ? _mktcapLive/1e6 : null,
-      ebitda_m: (_ebitda!==null&&_rev&&_rev!==0) ? _ebitda/_rev*100 : null,
-      net_m:    (_ni!==null&&_rev&&_rev!==0)      ? _ni/_rev*100     : null,
-      ebit_m:   (_ebit!==null&&_rev&&_rev!==0)    ? _ebit/_rev*100   : null,
-      roe:  (_ni!==null&&_eq&&_eq!==0) ? _ni/_eq*100 : null,
-      roa:  (_ni!==null&&_ta&&_ta!==0) ? _ni/_ta*100 : null,
-      pe:   (_mktcapLive&&_ni&&_ni>0)  ? _mktcapLive/_ni   : null,
-      pbv:  (_mktcapLive&&_eq&&_eq>0)  ? _mktcapLive/_eq   : null,
-      ev_ebitda: (_mktcapLive!==null&&_nd!==null&&_ebitda&&_ebitda!==0) ? (_mktcapLive+_nd)/_ebitda : null,
-      ev_rev:    (_mktcapLive!==null&&_nd!==null&&_rev&&_rev!==0)       ? (_mktcapLive+_nd)/_rev    : null,
-      nd_ebitda: (_nd!==null&&_ebitda&&_ebitda!==0) ? _nd/_ebitda : null,
-    };
-  });
-
-  const fmtM   = v => v===null ? '—' : '$'+v.toLocaleString('es-AR',{maximumFractionDigits:0})+'M';
+  const ratios = entriesToShow.map(e => calcRatiosForEntry(e, currentCompany));
+  const unidad = ratios[0].unidad;
+  const fmtA = v => v===null ? '—' : '$'+v.toLocaleString('es-AR',{maximumFractionDigits:0})+' '+unidad.slice(0,1);
   const fmtPct = v => v===null ? '—' : `<span style="color:${v<0?'var(--red)':'var(--green)'}">${v.toFixed(1)}%</span>`;
   const fmtX   = v => v===null ? '—' : v.toFixed(1)+'x';
-  const fmtPE  = v => v===null ? '—' : v.toFixed(1)+'x';
+
+  const cols = ratios.map(o => {
+    const lbl = selectedYear && selectedQuarter && selectedQuarter!=='annual'
+      ? o.q + ' ' + o.year
+      : o.year + ' (' + o.q + ')';
+    return lbl;
+  });
 
   const rows = [
     {title:'RESULTADOS', isHeader:true},
-    {lbl:'Revenue',          vals: ovByYear.map(o=>fmtM(o.rev))},
-    {lbl:'EBITDA',           vals: ovByYear.map(o=>fmtM(o.ebitda))},
-    {lbl:'EBIT',             vals: ovByYear.map(o=>fmtM(o.ebit))},
-    {lbl:'Net Income',       vals: ovByYear.map(o=>fmtM(o.ni))},
+    {lbl:'Revenue',       vals: ratios.map(o=>fmtA(o.rev))},
+    {lbl:'Gross Profit',  vals: ratios.map(o=>fmtA(o.gp))},
+    {lbl:'EBITDA',        vals: ratios.map(o=>fmtA(o.ebitda))},
+    {lbl:'EBIT',          vals: ratios.map(o=>fmtA(o.ebit))},
+    {lbl:'Net Income',    vals: ratios.map(o=>fmtA(o.ni))},
     {title:'MÁRGENES', isHeader:true},
-    {lbl:'EBITDA Margin',    vals: ovByYear.map(o=>fmtPct(o.ebitda_m))},
-    {lbl:'EBIT Margin',      vals: ovByYear.map(o=>fmtPct(o.ebit_m))},
-    {lbl:'Net Margin',       vals: ovByYear.map(o=>fmtPct(o.net_m))},
+    {lbl:'Gross Margin',  vals: ratios.map(o=>fmtPct(o.gp_m))},
+    {lbl:'EBITDA Margin', vals: ratios.map(o=>fmtPct(o.ebitda_m))},
+    {lbl:'EBIT Margin',   vals: ratios.map(o=>fmtPct(o.ebit_m))},
+    {lbl:'Net Margin',    vals: ratios.map(o=>fmtPct(o.net_m))},
     {title:'RENTABILIDAD', isHeader:true},
-    {lbl:'ROE',              vals: ovByYear.map(o=>fmtPct(o.roe))},
-    {lbl:'ROA',              vals: ovByYear.map(o=>fmtPct(o.roa))},
+    {lbl:'ROE',           vals: ratios.map(o=>fmtPct(o.roe))},
+    {lbl:'ROA',           vals: ratios.map(o=>fmtPct(o.roa))},
     {title:'DEUDA', isHeader:true},
-    {lbl:'Deuda Neta',       vals: ovByYear.map(o=>fmtM(o.nd))},
-    {lbl:'Equity',           vals: ovByYear.map(o=>fmtM(o.eq))},
-    {lbl:'Total Assets',     vals: ovByYear.map(o=>fmtM(o.ta))},
-    {lbl:'ND / EBITDA',      vals: ovByYear.map(o=>fmtX(o.nd_ebitda))},
+    {lbl:'Deuda Neta',    vals: ratios.map(o=>fmtA(o.nd))},
+    {lbl:'Equity',        vals: ratios.map(o=>fmtA(o.eq))},
+    {lbl:'Total Assets',  vals: ratios.map(o=>fmtA(o.ta))},
+    {lbl:'ND / EBITDA',   vals: ratios.map(o=>fmtX(o.nd_ebitda))},
+    {lbl:'ND / Equity',   vals: ratios.map(o=>fmtX(o.nd_eq))},
     {title:'VALUACIÓN', isHeader:true},
-    {lbl:'Market Cap',       vals: ovByYear.map(o=>fmtM(o.mktcap))},
-    {lbl:'P/E',              vals: ovByYear.map(o=>fmtPE(o.pe))},
-    {lbl:'P/BV',             vals: ovByYear.map(o=>fmtPE(o.pbv))},
-    {lbl:'EV/EBITDA',        vals: ovByYear.map(o=>fmtX(o.ev_ebitda))},
-    {lbl:'EV/Revenue',       vals: ovByYear.map(o=>fmtX(o.ev_rev))},
+    {lbl:'Market Cap',    vals: ratios.map(o=>fmtA(o.mktcap!==null?o.mktcap*1e6/1e6*1:null))},
+    {lbl:'P/E',           vals: ratios.map(o=>fmtX(o.pe))},
+    {lbl:'P/BV',          vals: ratios.map(o=>fmtX(o.pbv))},
+    {lbl:'EV/EBITDA',     vals: ratios.map(o=>fmtX(o.ev_ebitda))},
+    {lbl:'EV/Revenue',    vals: ratios.map(o=>fmtX(o.ev_rev))},
   ];
 
-  const yrLabels = ovByYear.map(o => o.year + ' (' + o.q + ')');
+  const periodLabel = selectedYear
+    ? (selectedQuarter && selectedQuarter!=='annual' ? `${selectedQuarter} ${selectedYear}` : `Anual ${selectedYear}`)
+    : `Últimos ${entriesToShow.length} año(s)`;
 
-  document.getElementById('rt').innerHTML = `
-    <div style="font-size:11px;color:var(--text3);margin-bottom:1rem">
-      Mostrando últimos ${ovByYear.length} año(s) · Seleccioná un año en el selector para ver un período específico
-    </div>
-    <div class="table-wrap">
-    <table style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead><tr>
-        <th style="text-align:left;padding:7px 12px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:11px">Métrica</th>
-        ${yrLabels.map(l=>`<th style="text-align:right;padding:7px 12px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:11px">${l}</th>`).join('')}
-      </tr></thead>
-      <tbody>
-        ${rows.map((row,i) => {
-          if (row.isHeader) return `<tr><td colspan="${ovByYear.length+1}"
-            style="padding:6px 12px;font-size:10px;font-weight:600;color:var(--text3);
-            text-transform:uppercase;letter-spacing:0.5px;background:var(--bg3)">${row.title}</td></tr>`;
-          return `<tr style="background:${i%2===0?'transparent':'rgba(0,0,0,0.02)'}">
-            <td style="padding:7px 12px;color:var(--text3)">${row.lbl}</td>
-            ${row.vals.map(v=>`<td style="padding:7px 12px;text-align:right;font-family:'DM Mono',monospace;font-weight:500">${v}</td>`).join('')}
-          </tr>`;
-        }).join('')}
-      </tbody>
-    </table></div>`;
+  document.getElementById('rt').innerHTML =
+    '<div style="font-size:11px;color:var(--text3);margin-bottom:1rem">'+periodLabel+' · Seleccioná año/período en el selector</div>'+
+    '<div class="table-wrap">'+
+    '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
+      '<thead><tr>'+
+        '<th style="text-align:left;padding:7px 12px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:11px">Métrica</th>'+
+        cols.map(l=>'<th style="text-align:right;padding:7px 12px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:11px">'+l+'</th>').join('')+
+      '</tr></thead><tbody>'+
+      rows.map(function(row,i){
+        if (row.isHeader) return '<tr><td colspan="'+(cols.length+1)+'" style="padding:6px 12px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;background:var(--bg3)">'+row.title+'</td></tr>';
+        return '<tr style="background:'+(i%2===0?'transparent':'rgba(0,0,0,0.02)')+'">'+
+          '<td style="padding:7px 12px;color:var(--text3)">'+row.lbl+'</td>'+
+          row.vals.map(v=>'<td style="padding:7px 12px;text-align:right;font-family:monospace;font-weight:500">'+v+'</td>').join('')+
+        '</tr>';
+      }).join('')+
+      '</tbody></table></div>';
 }
 
 
