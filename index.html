@@ -2577,35 +2577,106 @@ function renderAll(company) {
 
 // ── OVERVIEW ──────────────────────────────────────────────────────────────────
 function renderOverview(ov, income, balance) {
+  // For manual balances, get data directly from calcRatiosForEntry
+  if (fetchedData?._isManual && currentCompany) {
+    renderOverviewManual(ov);
+    return;
+  }
   const reports = getReports(income, 'income');
-  const labels = reports.map(getLabel);
   const isARS = currentCompany.currency === 'ARS' && currentCurrency === 'usd';
-
-  const revs   = reports.map(r => { const v=num(r.totalRevenue); return isARS?arsToUsd(v,r.fiscalDateEnding,true):v; }).map(v=>v?v/1e6:null);
-  const ebs    = reports.map(r => { const e=num(r.ebit),d=num(r.depreciationAndAmortization); let v=e&&d?e+d:null; return isARS?arsToUsd(v,r.fiscalDateEnding,true):v; }).map(v=>v?v/1e6:null);
-  const nis    = reports.map(r => { const v=num(r.netIncome); return isARS?arsToUsd(v,r.fiscalDateEnding,true):v; }).map(v=>v?v/1e6:null);
+  const revs = reports.map(r => { const v=num(r.totalRevenue); return isARS?arsToUsd(v,r.fiscalDateEnding,true):v; }).map(v=>v?v/1e6:null);
+  const ebs  = reports.map(r => { const e=num(r.ebit),d=num(r.depreciationAndAmortization); let v=e&&d?e+d:null; return isARS?arsToUsd(v,r.fiscalDateEnding,true):v; }).map(v=>v?v/1e6:null);
+  const nis  = reports.map(r => { const v=num(r.netIncome); return isARS?arsToUsd(v,r.fiscalDateEnding,true):v; }).map(v=>v?v/1e6:null);
   const mktCap = num(ov.MarketCapitalization);
-  const unit   = isARS ? 'USD M (conv.)' : 'USD M';
-
-  document.getElementById('ov').innerHTML = `
-    ${isARS?`<div class="fx-note">⚡ Conversión ARS→USD aplicada usando FX promedio BCRA para flujos y FX cierre para stocks</div>`:''}
-    <div class="mgrid">
-      <div class="mc"><div class="ml">Market Cap</div><div class="mv">${fmt(mktCap)}</div><div class="ms">${currentCompany.market}</div></div>
-      <div class="mc"><div class="ml">Revenue (último)</div><div class="mv">${revs[revs.length-1]?'$'+revs[revs.length-1].toFixed(0)+'M':'—'}</div><div class="ms">${unit}</div></div>
-      <div class="mc"><div class="ml">EBITDA (último)</div><div class="mv">${ebs[ebs.length-1]?'$'+ebs[ebs.length-1].toFixed(0)+'M':'—'}</div><div class="ms">EBIT + D&A</div></div>
-      <div class="mc"><div class="ml">Net Income</div><div class="mv ${nis[nis.length-1]<0?'neg':'pos'}">${nis[nis.length-1]?'$'+nis[nis.length-1].toFixed(0)+'M':'—'}</div><div class="ms">${unit}</div></div>
-      <div class="mc"><div class="ml">P/E</div><div class="mv">${ov.PERatio&&ov.PERatio!=='None'?parseFloat(ov.PERatio).toFixed(1)+'x':'—'}</div><div class="ms">Trailing</div></div>
-      <div class="mc"><div class="ml">P/BV</div><div class="mv">${ov.PriceToBookRatio&&ov.PriceToBookRatio!=='None'?parseFloat(ov.PriceToBookRatio).toFixed(2)+'x':'—'}</div><div class="ms">Precio / Book</div></div>
-      <div class="mc"><div class="ml">EV/EBITDA</div><div class="mv">${ov.EVToEBITDA&&ov.EVToEBITDA!=='None'?parseFloat(ov.EVToEBITDA).toFixed(1)+'x':'—'}</div><div class="ms">Enterprise value</div></div>
-      <div class="mc"><div class="ml">Beta</div><div class="mv">${ov.Beta&&ov.Beta!=='None'?parseFloat(ov.Beta).toFixed(2):'—'}</div><div class="ms">Volatilidad relativa</div></div>
-    </div>
-    `;
-  setTimeout(() => {
-
-}, 50);
+  const unit = isARS ? 'USD M (conv.)' : 'USD M';
+  document.getElementById('ov').innerHTML =
+    (isARS?'<div class="fx-note">⚡ Conversión ARS→USD aplicada usando FX promedio BCRA para flujos y FX cierre para stocks</div>':'')+
+    '<div class="mgrid">'+
+      '<div class="mc"><div class="ml">Market Cap</div><div class="mv">'+fmt(mktCap)+'</div><div class="ms">'+currentCompany.market+'</div></div>'+
+      '<div class="mc"><div class="ml">Revenue</div><div class="mv">'+(revs[revs.length-1]?'$'+revs[revs.length-1].toFixed(0)+'M':'—')+'</div><div class="ms">'+unit+'</div></div>'+
+      '<div class="mc"><div class="ml">EBITDA</div><div class="mv">'+(ebs[ebs.length-1]?'$'+ebs[ebs.length-1].toFixed(0)+'M':'—')+'</div><div class="ms">EBIT + D&A</div></div>'+
+      '<div class="mc"><div class="ml">Net Income</div><div class="mv '+(nis[nis.length-1]<0?'neg':'pos')+'">'+(nis[nis.length-1]?'$'+nis[nis.length-1].toFixed(0)+'M':'—')+'</div><div class="ms">'+unit+'</div></div>'+
+      '<div class="mc"><div class="ml">P/E</div><div class="mv">'+(ov.PERatio&&ov.PERatio!=='None'?parseFloat(ov.PERatio).toFixed(1)+'x':'—')+'</div><div class="ms">Trailing</div></div>'+
+      '<div class="mc"><div class="ml">P/BV</div><div class="mv">'+(ov.PriceToBookRatio&&ov.PriceToBookRatio!=='None'?parseFloat(ov.PriceToBookRatio).toFixed(2)+'x':'—')+'</div><div class="ms">Precio / Book</div></div>'+
+      '<div class="mc"><div class="ml">EV/EBITDA</div><div class="mv">'+(ov.EVToEBITDA&&ov.EVToEBITDA!=='None'?parseFloat(ov.EVToEBITDA).toFixed(1)+'x':'—')+'</div><div class="ms">Enterprise value</div></div>'+
+      '<div class="mc"><div class="ml">Beta</div><div class="mv">'+(ov.Beta&&ov.Beta!=='None'?parseFloat(ov.Beta).toFixed(2):'—')+'</div><div class="ms">Volatilidad relativa</div></div>'+
+    '</div>';
 }
 
-// ── INCOME STATEMENT ──────────────────────────────────────────────────────────
+function renderOverviewManual(ov) {
+  if (!currentCompany) return;
+  const db = balGetAll();
+  const prefix = currentCompany.name + '||';
+
+  // Pick entry based on selected period
+  const allEntries = Object.entries(db)
+    .filter(([k]) => k.startsWith(prefix))
+    .map(([k,v]) => { const [,year,q]=k.split('||'); return {year:parseInt(year),q,data:v}; });
+
+  let entry = null;
+  if (selectedYear && selectedQuarter && selectedQuarter !== 'annual') {
+    entry = allEntries.find(e => String(e.year)===String(selectedYear) && e.q===selectedQuarter);
+  } else if (selectedYear) {
+    entry = allEntries.find(e => String(e.year)===String(selectedYear) && e.q==='Anual')
+         || allEntries.find(e => String(e.year)===String(selectedYear) && e.q==='Q4');
+  } else {
+    // Most recent Anual, else Q4
+    const byYear = {};
+    allEntries.filter(e => e.q==='Anual'||e.q==='Q4').forEach(e => {
+      const yr = e.year;
+      if (!byYear[yr]) { byYear[yr] = e; return; }
+      if (e.q==='Anual' && byYear[yr].q==='Q4') byYear[yr] = e;
+      else if (e.q===byYear[yr].q && byYear[yr].data._derived && !e.data._derived) byYear[yr] = e;
+    });
+    const sorted = Object.values(byYear).sort((a,b)=>b.year-a.year);
+    entry = sorted[0] || null;
+  }
+
+  if (!entry) {
+    document.getElementById('ov').innerHTML = '<div style="padding:2rem;color:var(--text3)">No hay datos para el período seleccionado.</div>';
+    return;
+  }
+
+  const r = calcRatiosForEntry(entry, currentCompany);
+  const unidad = entry.data._unidad || 'Millones';
+  const fmtA = v => v===null ? '—' : '$'+Math.round(v).toLocaleString('es-AR')+' '+unidad.slice(0,1);
+  const fmtPct = (v, red0=true) => v===null ? '—' : '<span style="color:'+(v<0&&red0?'var(--red)':'var(--green)')+'">'+v.toFixed(1)+'%</span>';
+  const fmtX = v => v===null ? '—' : v.toFixed(1)+'x';
+
+  // Interest coverage: EBITDA / |interest_paid|
+  const d = entry.data;
+  const _m = unidad==='Miles' ? 1e3 : unidad==='Millones' ? 1e6 : 1;
+  const intPaid = d.interest_paid ? Math.abs(parseFloat(d.interest_paid)) : null;
+  const ebitdaRaw = (d.ebit !== null && d.da !== null) ? parseFloat(d.ebit) + Math.abs(parseFloat(d.da)) : null;
+  const ebitdaCov = (ebitdaRaw !== null && intPaid && intPaid !== 0) ? ebitdaRaw / intPaid : null;
+
+  const periodLbl = selectedYear
+    ? (selectedQuarter && selectedQuarter!=='annual' ? selectedQuarter+' '+selectedYear : 'Anual '+selectedYear)
+    : entry.year+' ('+entry.q+')';
+
+  document.getElementById('ov').innerHTML =
+    '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:1rem">'+
+      '<span style="font-size:15px;font-weight:600;color:var(--text)">Overview</span>'+
+      '<span style="font-size:13px;color:var(--text2);font-weight:500">'+currentCompany.name+'</span>'+
+      '<span style="font-size:11px;color:var(--text3)">'+periodLbl+'</span>'+
+    '</div>'+
+    '<div class="mgrid">'+
+      '<div class="mc"><div class="ml">Market Cap</div><div class="mv">'+(r.mktcap!==null?'$'+Math.round(r.mktcap).toLocaleString('es-AR')+'M':'—')+'</div><div class="ms">Precio × acciones</div></div>'+
+      '<div class="mc"><div class="ml">Revenue</div><div class="mv">'+fmtA(r.rev)+'</div><div class="ms">'+unidad+'</div></div>'+
+      '<div class="mc"><div class="ml">EBITDA</div><div class="mv">'+fmtA(r.ebitda)+'</div><div class="ms">EBIT + D&A</div></div>'+
+      '<div class="mc"><div class="ml">Net Income</div><div class="mv">'+(r.ni!==null?'<span style="color:'+(r.ni<0?'var(--red)':'var(--green)')+'">'+fmtA(r.ni)+'</span>':'—')+'</div><div class="ms">'+unidad+'</div></div>'+
+      '<div class="mc"><div class="ml">EBITDA Margin</div><div class="mv">'+fmtPct(r.ebitda_m, false)+'</div><div class="ms">EBITDA / Revenue</div></div>'+
+      '<div class="mc"><div class="ml">ROE</div><div class="mv">'+fmtPct(r.roe)+'</div><div class="ms">Net Income / Equity</div></div>'+
+      '<div class="mc"><div class="ml">Deuda Neta</div><div class="mv">'+fmtA(r.nd)+'</div><div class="ms">'+unidad+'</div></div>'+
+      '<div class="mc"><div class="ml">ND / EBITDA</div><div class="mv">'+fmtX(r.nd_ebitda)+'</div><div class="ms">Apalancamiento</div></div>'+
+      '<div class="mc"><div class="ml">EBITDA / Intereses</div><div class="mv">'+fmtX(ebitdaCov)+'</div><div class="ms">Cobertura de intereses</div></div>'+
+      '<div class="mc"><div class="ml">P/E</div><div class="mv">'+fmtX(r.pe)+'</div><div class="ms">Precio / Earnings</div></div>'+
+      '<div class="mc"><div class="ml">P/BV</div><div class="mv">'+fmtX(r.pbv)+'</div><div class="ms">Precio / Book</div></div>'+
+      '<div class="mc"><div class="ml">EV/EBITDA</div><div class="mv">'+fmtX(r.ev_ebitda)+'</div><div class="ms">Enterprise value</div></div>'+
+    '</div>';
+}
+
+
 function renderIS(income, company) {
   const reports = getReports(income, 'income');
   const labels  = reports.map(getLabel);
