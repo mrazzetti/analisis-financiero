@@ -2820,10 +2820,16 @@ function renderRatiosMulti() {
     const e = allEntries.find(e => String(e.year)===String(selectedYear) && e.q===selectedQuarter);
     if (e) entriesToShow = [e];
   } else if (selectedYear) {
-    // Year selected, annual view: show Anual or Q4 for that year
-    const e = allEntries.find(e => String(e.year)===String(selectedYear) && e.q==='Anual')
-           || allEntries.find(e => String(e.year)===String(selectedYear) && e.q==='Q4');
-    if (e) entriesToShow = [e];
+    // Year selected — if quarterly period chosen show that quarter, else show Anual preferring 'Anual' over 'Q4'
+    const selQ = selectedQuarter && selectedQuarter !== 'annual' ? selectedQuarter : null;
+    if (selQ) {
+      const e = allEntries.find(e => String(e.year)===String(selectedYear) && e.q===selQ);
+      if (e) entriesToShow = [e];
+    } else {
+      const e = allEntries.find(e => String(e.year)===String(selectedYear) && e.q==='Anual')
+             || allEntries.find(e => String(e.year)===String(selectedYear) && e.q==='Q4');
+      if (e) entriesToShow = [e];
+    }
   } else if (selectedQuarter && selectedQuarter !== 'annual') {
     // No year but specific quarter: show that quarter across last 3 years
     const byYear = {};
@@ -2914,7 +2920,7 @@ function renderRatiosMulti() {
         cols.map(l=>'<th style="text-align:right;padding:7px 12px;border-bottom:0.5px solid var(--border);color:var(--text3);font-size:11px">'+l+'</th>').join('')+
       '</tr></thead><tbody>'+
       rows.map(function(row,i){
-        if (row.isHeader) return '<tr><td colspan="'+(cols.length+1)+'" style="padding:6px 12px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;background:var(--bg3)">'+row.title+'</td></tr>';
+        if (row.isHeader) return '<tr><td colspan="'+(cols.length+1)+'" style="padding:7px 12px;font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.6px;background:var(--bg3);border-top:1.5px solid var(--border)">'+row.title+'</td></tr>';
         return '<tr style="background:'+(i%2===0?'transparent':'rgba(0,0,0,0.02)')+'">'+
           '<td style="padding:7px 12px;color:var(--text3)">'+row.lbl+'</td>'+
           row.vals.map(v=>'<td style="padding:7px 12px;text-align:right;font-family:monospace;font-weight:500">'+v+'</td>').join('')+
