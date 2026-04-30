@@ -3874,8 +3874,9 @@ function renderComparator() {
       return q === 'Q1' || q === 'Q2' || q === 'Q3' || q === 'Q4';
     });
   }
-  if (!compRangeFrom && allPeriods.length) compRangeFrom = allPeriods[0];
-  if (!compRangeTo   && allPeriods.length) compRangeTo   = allPeriods[allPeriods.length-1];
+  // Always reset to valid periods for current mode
+  if ((!compRangeFrom || !allPeriods.includes(compRangeFrom)) && allPeriods.length) compRangeFrom = allPeriods[0];
+  if ((!compRangeTo   || !allPeriods.includes(compRangeTo))   && allPeriods.length) compRangeTo   = allPeriods[allPeriods.length-1];
 
   // Table uses ALL periods independently (not filtered by chart mode)
   const allPeriodsAll = _rawPeriods; // full list: Q1/Q2/Q3/Q4/Anual
@@ -4047,13 +4048,9 @@ function compClear(slot) {
 
 function setCompViewMode(mode) {
   compViewMode = mode;
-  compRangeFrom = ''; compRangeTo = ''; // reset range when switching mode
-  runComparison();
-  // Update button styles
-  const btnA = document.getElementById('compModeAnual');
-  const btnT = document.getElementById('compModeTrim');
-  if (btnA) { btnA.style.background = mode==='anual'?'var(--green2)':'var(--bg3)'; btnA.style.color = mode==='anual'?'var(--green)':'var(--text3)'; }
-  if (btnT) { btnT.style.background = mode==='trimestral'?'var(--green2)':'var(--bg3)'; btnT.style.color = mode==='trimestral'?'var(--green)':'var(--text3)'; }
+  compRangeFrom = ''; compRangeTo = ''; // reset so renderComparator picks correct defaults
+  renderComparator(); // full re-render so selectors rebuild with correct options
+  setTimeout(runComparison, 50);
 }
 
 function runComparison() {
