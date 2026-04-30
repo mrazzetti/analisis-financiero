@@ -4064,7 +4064,23 @@ function runComparison() {
   });
   const names = companies.map(co => co.name);
 
-  const allPeriods = getAvailablePeriods(names);
+  // Build chart periods filtered by mode (Anual or Trimestral)
+  const _rawAll = getAvailablePeriods(names);
+  let allPeriods;
+  if (compViewMode === 'anual') {
+    const _byYr = {};
+    _rawAll.forEach(function(p) {
+      const parts = p.split('||'), yr = parts[0], q = parts[1];
+      if (q !== 'Anual' && q !== 'Q4') return;
+      if (!_byYr[yr] || q === 'Anual') _byYr[yr] = p;
+    });
+    allPeriods = Object.values(_byYr).sort();
+  } else {
+    allPeriods = _rawAll.filter(function(p) {
+      const q = p.split('||')[1];
+      return q === 'Q1' || q === 'Q2' || q === 'Q3' || q === 'Q4';
+    });
+  }
   const fromIdx = allPeriods.indexOf(compRangeFrom);
   const toIdx   = allPeriods.indexOf(compRangeTo);
   const rangePeriods = allPeriods.slice(
