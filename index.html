@@ -3876,9 +3876,14 @@ function renderComparator() {
   }
   if (!compRangeFrom && allPeriods.length) compRangeFrom = allPeriods[0];
   if (!compRangeTo   && allPeriods.length) compRangeTo   = allPeriods[allPeriods.length-1];
-  if (!compTablePeriod && allPeriods.length) compTablePeriod = allPeriods[allPeriods.length-1];
 
-  const mkOpts = (sel) => allPeriods.map(p =>
+  // Table uses ALL periods independently (not filtered by chart mode)
+  const allPeriodsAll = _rawPeriods; // full list: Q1/Q2/Q3/Q4/Anual
+  if (!compTablePeriod && allPeriodsAll.length) compTablePeriod = allPeriodsAll[allPeriodsAll.length-1];
+
+  const mkOpts     = (sel) => allPeriods.map(p =>
+    `<option value="${p}" ${p===sel?'selected':''}>${periodLabel(p)}</option>`).join('');
+  const mkOptsAll  = (sel) => allPeriodsAll.map(p =>
     `<option value="${p}" ${p===sel?'selected':''}>${periodLabel(p)}</option>`).join('');
 
   document.getElementById('compContent').innerHTML = `
@@ -3967,7 +3972,7 @@ function renderComparator() {
           <span style="font-size:11px;color:var(--text3)">Período</span>
           <select id="compTableSel" onchange="compTablePeriod=this.value;runComparison()"
             style="padding:4px 8px;background:var(--bg3);border:0.5px solid var(--border2);border-radius:6px;color:var(--text);font-size:11px;outline:none">
-            ${mkOpts(compTablePeriod)}
+            ${mkOptsAll(compTablePeriod)}
           </select>
         </div>
       </div>
